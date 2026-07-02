@@ -282,12 +282,14 @@ const clamp=(v,a,b)=>v<a?a:v>b?b:v;
 const lerp=(a,b,t)=>a+(b-a)*t;
 const dist2=(ax,az,bx,bz)=>Math.hypot(ax-bx,az-bz);
 
-const HOP_BUILD='7.02c';
+const HOP_BUILD='7.02d';
 let GFXPOLY=false; /* 'Smooth' graphics prototype (low-poly terrain + flat colors) */
 const SAVE_KEY='hoptopia1';
 const DEF_SAVE={started:false,critter:'frog',mode:'',coins:0,inv:{},quests:{},best:{},plot:[],pos:null,sound:true,music:true,tut:false,outfit:{hat:'none',neck:'none'},wardrobe:{}};
 let SV=loadSave();
-GFXPOLY=SV.gfx==='poly'||new URLSearchParams(location.search).has('poly');
+GFXPOLY=SV.gfx?SV.gfx==='poly':true;
+if(new URLSearchParams(location.search).has('poly'))GFXPOLY=true;
+if(new URLSearchParams(location.search).has('blocky'))GFXPOLY=false;
 SV.outfit=SV.outfit||{hat:'none',neck:'none'};
 SV.wardrobe=SV.wardrobe||{};
 if(SV.music===undefined)SV.music=true;
@@ -471,6 +473,7 @@ function zoneAt(x,z){let best=null,bt=0;
   return {zn:best,t:bt*bt*(3-2*bt)};}
 
 const bioMap=new Uint8Array(W*D); /* 0 meadow 1 forest 2 swamp 3 beach 4 pond 5 zone */
+const TERR_H=new Uint8Array(W*D);  /* natural terrain height BEFORE structures — smoothing anchor */
 function genTerrain(){
   for(let z=0;z<D;z++)for(let x=0;x<W;x++){
     let h=6+fbm(x*.035,z*.035)*16;
@@ -486,6 +489,7 @@ function genTerrain(){
     else if(m<0.42&&h<=WL+3)b=2;
     else b=0;
     bioMap[z*W+x]=b;
+    TERR_H[z*W+x]=h;
     for(let y=0;y<h;y++){
       let bl=B.stone;
       if(y===h-1){
@@ -1039,10 +1043,33 @@ function natTopAt(x,z){
     const b=world[base+y];
     if(b===B.air||CROSS.has(b))continue;
     if(b===B.water)return -1;
-    if(NATURAL.has(b)){const h=y+1;return h-1<=WL?-1:h;}
+    if(NATURAL.has(b)){const h=y+1;return h<=WL?-1:h;} /* shorelines smooth too */
     return -1;
   }
   return -1;
+}
+/* effective height for smoothing: natural top, or the ORIGINAL terrain under
+   structures — never a wall or roof (that caused grass tents up buildings) */
+function effHG(x,z){
+  if(x<0||z<0||x>=W||z>=D)return WL+1;
+  const n=natTopAt(x,z);
+  return n>0?n:TERR_H[z*W+x];
+}
+function cornerHG(cx,cz){
+  return (effHG(cx-1,cz-1)+effHG(cx,cz-1)+effHG(cx-1,cz)+effHG(cx,cz))/4;
+}
+/* visual ground height under a world position, or -1 off the smooth sheet */
+function smoothGroundY(x,z){
+  const xi=Math.floor(x),zi=Math.floor(z);
+  if(natTopAt(xi,zi)<0)return -1;
+  const fx=x-xi,fz=z-zi;
+  return lerp(lerp(cornerHG(xi,zi),cornerHG(xi+1,zi),fx),
+              lerp(cornerHG(xi,zi+1),cornerHG(xi+1,zi+1),fx),fz);
+}
+/* walkable ground for NPCs/shadows: sheet when smooth mode, blocks otherwise */
+function walkGroundY(x,z){
+  if(GFXPOLY){const s2=smoothGroundY(x,z);if(s2>0)return s2;}
+  return groundY(x,z);
 }
 function pushTri(arr,a,b2,c,t,l){
   const uv=quadUV(t),u=(uv[0]+uv[2])/2,v=(uv[1]+uv[3])/2;
@@ -1059,21 +1086,17 @@ function triLight(a,b2,c,jit){
 function buildChunk(ci,cj){
   const arr=[],war=[];
   const x0=ci*16,z0=cj*16;
-  const EFF=new Map(),NTC=new Map();
+  const NTC=new Map();
   const nt=(X,Z)=>{const k=X*1024+Z;let v=NTC.get(k);
     if(v===undefined){v=natTopAt(X,Z);NTC.set(k,v);}return v;};
-  const eff=(X,Z)=>{const k=X*1024+Z;let v=EFF.get(k);
-    if(v===undefined){const n=nt(X,Z);v=n>0?n:groundY(X,Z);EFF.set(k,v);}return v;};
   for(let x=x0;x<x0+16;x++)for(let z=z0;z<z0+16;z++){
     const base=colI(x,z);
     let hn=-1,cc=0;
     if(GFXPOLY){
       hn=nt(x,z);
       if(hn>0){
-        const c00=(eff(x-1,z-1)+eff(x,z-1)+eff(x-1,z)+eff(x,z))/4;
-        const c10=(eff(x,z-1)+eff(x+1,z-1)+eff(x,z)+eff(x+1,z))/4;
-        const c01=(eff(x-1,z)+eff(x,z)+eff(x-1,z+1)+eff(x,z+1))/4;
-        const c11=(eff(x,z)+eff(x+1,z)+eff(x,z+1)+eff(x+1,z+1))/4;
+        const c00=cornerHG(x,z),c10=cornerHG(x+1,z),
+              c01=cornerHG(x,z+1),c11=cornerHG(x+1,z+1);
         cc=(c00+c10+c01+c11)/4;
         const t=tileFor(world[base+hn-1],0);
         const jit=(hash2(x*3+7,z*5+1)-0.5)*0.08;
@@ -1144,6 +1167,37 @@ const cubeVB=gl.createBuffer();
     const ord=[0,1,2,0,2,3];for(const i of ord)a.push(c[i][0],c[i][1],c[i][2],F.l);}
   gl.bindBuffer(gl.ARRAY_BUFFER,cubeVB);
   gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(a),gl.STATIC_DRAW);})();
+/* rounded box (chamfered corners, per-vertex sun shading) — Smooth mode critters */
+const roundVB=gl.createBuffer();
+let ROUND_N=0;
+(function(){
+  const r=0.24,g2=5,a=[];
+  const AX=[[0,1,2,1],[0,1,2,-1],[1,0,2,1],[1,0,2,-1],[2,0,1,1],[2,0,1,-1]];
+  const P=(ax,u,v)=>{const p=[0,0,0];p[ax[0]]=ax[3]*0.5;p[ax[1]]=u;p[ax[2]]=v;return p;};
+  function vert(p){
+    const inn=p.map(c=>clamp(c,-0.5+r,0.5-r));
+    let dx=p[0]-inn[0],dy=p[1]-inn[1],dz=p[2]-inn[2];
+    const dl=Math.hypot(dx,dy,dz);
+    let n,pos;
+    if(dl<1e-6){n=[0,0,0];const i=p.findIndex(c=>Math.abs(c)>0.499);n[i]=Math.sign(p[i]);pos=p;}
+    else{n=[dx/dl,dy/dl,dz/dl];pos=[inn[0]+n[0]*r,inn[1]+n[1]*r,inn[2]+n[2]*r];}
+    const d=Math.max(0,n[0]*SUNV[0]+n[1]*SUNV[1]+n[2]*SUNV[2]);
+    const l=clamp(0.52+0.5*d+0.1*Math.max(0,n[1]),0.4,1.08);
+    return [pos[0],pos[1],pos[2],l];
+  }
+  for(const ax of AX){
+    for(let i=0;i<g2-1;i++)for(let j=0;j<g2-1;j++){
+      const u0=-0.5+i/(g2-1),u1=-0.5+(i+1)/(g2-1);
+      const v0=-0.5+j/(g2-1),v1=-0.5+(j+1)/(g2-1);
+      const q=[vert(P(ax,u0,v0)),vert(P(ax,u1,v0)),vert(P(ax,u1,v1)),vert(P(ax,u0,v1))];
+      for(const k of [0,1,2,0,2,3])a.push(q[k][0],q[k][1],q[k][2],q[k][3]);
+    }
+  }
+  ROUND_N=a.length/4;
+  gl.bindBuffer(gl.ARRAY_BUFFER,roundVB);
+  gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(a),gl.STATIC_DRAW);
+})();
+let ENT_VBUF=null,ENT_N=36;
 function beginEnts(pv,cam){gl.useProgram(PE.p);
   gl.uniformMatrix4fv(PE.uPV,false,pv);
   gl.uniform3f(PE.uCam,cam[0],cam[1],cam[2]);
@@ -1151,12 +1205,13 @@ function beginEnts(pv,cam){gl.useProgram(PE.p);
   gl.uniform2f(PE.uFogD,FOGD[0],FOGD[1]);
   gl.uniform1f(PE.uEAlpha,1);
   gl.uniform1f(PE.uAmb,AMB);
-  gl.bindBuffer(gl.ARRAY_BUFFER,cubeVB);
+  ENT_VBUF=GFXPOLY?roundVB:cubeVB;ENT_N=GFXPOLY?ROUND_N:36;
+  gl.bindBuffer(gl.ARRAY_BUFFER,ENT_VBUF);
   gl.enableVertexAttribArray(PE.aP);gl.vertexAttribPointer(PE.aP,3,gl.FLOAT,false,16,0);
   gl.enableVertexAttribArray(PE.aL);gl.vertexAttribPointer(PE.aL,1,gl.FLOAT,false,16,12);}
 function drawBox(m,colHex){gl.uniformMatrix4fv(PE.uM,false,m);
   const c=hexRGB(colHex);gl.uniform3f(PE.uCol,c[0],c[1],c[2]);
-  gl.drawArrays(gl.TRIANGLES,0,36);}
+  gl.drawArrays(gl.TRIANGLES,0,ENT_N);}
 function drawBoxA(m,colHex,a){gl.uniform1f(PE.uEAlpha,a);drawBox(m,colHex);gl.uniform1f(PE.uEAlpha,1);}
 
 /* ---- real-time day/night: the pond lives on the host's actual clock ---- */
@@ -1236,6 +1291,7 @@ function drawSky(cam){
   /* clouds: crisp opaque slabs, softly lit, dimmed after dark */
   const cAmb=Math.round(clamp(AMB+0.08,0.4,1)*16)/16;
   const cCol=shade('#fdfeff',cAmb);
+  const saveN=ENT_N;ENT_N=36;
   gl.bindBuffer(gl.ARRAY_BUFFER,cloudVB);
   gl.vertexAttribPointer(PE.aP,3,gl.FLOAT,false,16,0);
   gl.vertexAttribPointer(PE.aL,1,gl.FLOAT,false,16,12);
@@ -1244,7 +1300,8 @@ function drawSky(cam){
     drawBox(mMul(mT(cx,c.y,c.z),mS(c.sx,1.8,c.sz)),cCol);
     drawBox(mMul(mT(cx+c.sx*0.15,c.y+1.5,c.z+c.sz*0.08),mS(c.sx*0.55,1.6,c.sz*0.6)),cCol);
   }
-  gl.bindBuffer(gl.ARRAY_BUFFER,cubeVB);
+  ENT_N=saveN;
+  gl.bindBuffer(gl.ARRAY_BUFFER,ENT_VBUF);
   gl.vertexAttribPointer(PE.aP,3,gl.FLOAT,false,16,0);
   gl.vertexAttribPointer(PE.aL,1,gl.FLOAT,false,16,12);
   gl.uniform2f(PE.uFogD,FOGD[0],FOGD[1]);
@@ -1274,7 +1331,7 @@ function drawParts(){
 }
 /* soft blob shadow that grounds critters */
 function drawShadow(e){
-  const gy=groundY(e.x,e.z),h=e.y-gy;
+  const gy=walkGroundY(e.x,e.z),h=e.y-gy;
   if(h<-1||h>6)return;
   const s=0.62*clamp(1-h*0.2,0.35,1);
   drawBoxA(mMul(mT(e.x,gy+0.045,e.z),mS(s,0.02,s)),'#06140a',0.32*clamp(1-h*0.12,0.35,1));
@@ -1325,8 +1382,12 @@ const NPCS=[],FLIES=[],COINSE=[],RESPAWN=[];
 function ptSolid(px,py,pz){
   const fx=Math.floor(px),fy=Math.floor(py),fz=Math.floor(pz);
   const b=gb(fx,fy,fz);
-  if(SOLID.has(b)||b===B.fence)return true;
-  /* fences are 1.6 blocks tall for collision: too tall to auto-hop, jumpable on purpose */
+  if(SOLID.has(b)||b===B.fence){
+    /* smooth mode: natural ground is walked via the sheet (smoothGroundY),
+       so its blocks stop being invisible stair-step colliders */
+    if(GFXPOLY&&NATURAL.has(b)&&natTopAt(fx,fz)>0)return false;
+    return true;
+  }
   if(gb(fx,fy-1,fz)===B.fence&&py-fy<0.6)return true;
   return false;}
 function boxSolid(e,x,y,z){
@@ -1355,6 +1416,13 @@ function moveEntity(e,dt){
   else{if(e.vy<0)e.y=Math.floor(ny+0.02)+1.0001;e.vy=0;}
   /* stable ground probe (a collision-event flag flickers between frames) */
   e.onGround=e.vy<=0&&boxSolid(e,e.x,e.y-0.06,e.z);
+  if(GFXPOLY){ /* the low-poly sheet is the real floor on natural ground */
+    const sg=smoothGroundY(e.x,e.z);
+    if(sg>0){
+      if(e.y<=sg+0.07&&e.vy<=0){e.y=sg;e.vy=0;e.onGround=true;}
+      else if(e.y<sg){e.y=sg;if(e.vy<0)e.vy=0;e.onGround=true;}
+    }
+  }
   e.x=clamp(e.x,1.5,W-1.5);e.z=clamp(e.z,1.5,D-1.5);
   if(e.y<-6){e.y=groundY(e.x,e.z)+1;e.vy=0;}
 }
@@ -1413,10 +1481,10 @@ function updateNPC(n,dt){
   const dx=n.tx-n.x,dz=n.tz-n.z,d=Math.hypot(dx,dz);
   if(d>0.35){
     const stx=dx/d*1.25*dt,stz=dz/d*1.25*dt;
-    const gy=groundY(n.x+stx*4,n.z+stz*4);
+    const gy=walkGroundY(n.x+stx*4,n.z+stz*4);
     if(gy<=WL+0.2||Math.abs(gy-n.y)>1.4){n.wt=0;n.moving=false;return;}
     n.x+=stx;n.z+=stz;n.yaw=Math.atan2(dx,dz);n.moving=true;
-    n.y=lerp(n.y,groundY(n.x,n.z),Math.min(1,12*dt));
+    n.y=lerp(n.y,walkGroundY(n.x,n.z),Math.min(1,12*dt));
   }else n.moving=false;
 }
 
@@ -2329,7 +2397,7 @@ function openPause(){
      [SV.music?'Music: ON':'Music: OFF','purple',()=>{SV.music=!SV.music;save();
         if(SV.music)musStart();else musStop();closeModal();openPause();}],
      [GFXPOLY?'Graphics: Smooth (new!)':'Graphics: Blocky','purple',()=>{
-        GFXPOLY=!GFXPOLY;SV.gfx=GFXPOLY?'poly':'';save();closeModal();
+        GFXPOLY=!GFXPOLY;SV.gfx=GFXPOLY?'poly':'blocky';save();closeModal();
         $('#loading .t').textContent='Repainting the pond…';
         $('#loading').style.display='flex';
         setTimeout(()=>{buildAllChunks();$('#loading').style.display='none';
