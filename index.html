@@ -93,6 +93,34 @@ html,body{margin:0;height:100%;height:100dvh;width:100%;
 @keyframes viewin{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
 .view::-webkit-scrollbar{width:0;height:0;}
 
+/* ---------- HOME: carousel over a spinning lilypad + dock ---------- */
+#view-home{overflow:hidden;display:flex;flex-direction:column;padding-bottom:1.5%;}
+#view-home .home-greet{flex:none;}
+#caro{flex:1;display:flex;align-items:center;gap:7vmin;overflow-x:auto;overflow-y:hidden;
+  scroll-snap-type:x mandatory;padding:0 calc(50% - 15vmin);z-index:2;}
+#caro::-webkit-scrollbar{display:none;}
+.caro-item{flex:none;width:30vmin;background:none;border:none;scroll-snap-align:center;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;gap:1.2vmin;color:#fff;font-weight:900;
+  font-size:clamp(13px,3vmin,24px);text-shadow:0 2px 4px rgba(0,40,80,.55);}
+.cbig{width:100%;aspect-ratio:1;position:relative;transition:transform .16s ease-out;
+  filter:drop-shadow(0 14px 16px rgba(0,40,70,.42));}
+.cbig .ic-svg{width:100%;height:100%;display:block;}
+.cbig .badge{font-size:clamp(11px,2.4vmin,17px);}
+#lilystage{position:absolute;left:50%;top:50%;width:46vmin;height:46vmin;
+  transform:translate(-50%,-34%);pointer-events:none;z-index:1;opacity:.95;}
+#lilystage svg{width:100%;height:100%;transform-origin:50% 50%;
+  filter:drop-shadow(0 10px 16px rgba(0,40,70,.35));}
+#dock{flex:none;display:flex;justify-content:flex-start;gap:1.8vmin;margin:0 auto;max-width:94%;
+  padding:1.4vmin 2.2vmin calc(1.4vmin + env(safe-area-inset-bottom)*0.5);
+  background:rgba(255,255,255,.16);border:1.5px solid rgba(255,255,255,.35);
+  border-radius:3vmin;backdrop-filter:blur(12px);overflow-x:auto;z-index:3;}
+#dock::-webkit-scrollbar{display:none;}
+.dockic{flex:none;width:clamp(42px,8.5vmin,66px);aspect-ratio:1;border:none;background:none;
+  position:relative;cursor:pointer;transition:transform .12s;padding:0;}
+.dockic:active{transform:scale(1.2) translateY(-8px);}
+.dockic svg{width:100%;height:100%;display:block;filter:drop-shadow(0 4px 6px rgba(0,40,70,.35));}
+.dockic .badge{top:-10%;right:-4%;font-size:clamp(9px,1.8vmin,13px);}
+
 /* ---------- HOME ---------- */
 .home-greet{display:flex;align-items:center;gap:2.5%;color:#fff;margin:.2% 0 2%;
   text-shadow:0 2px 4px rgba(0,40,80,.4);}
@@ -179,9 +207,11 @@ html,body{margin:0;height:100%;height:100dvh;width:100%;
   box-shadow:0 2px 5px rgba(0,0,0,.35);}
 
 /* ---------- Doodle ---------- */
-#doodle-wrap{display:flex;flex-direction:column;gap:2%;height:100%;}
-#doodle-canvas{flex:1;width:100%;background:#fff;border-radius:1.2vmin;box-shadow:var(--shadow);touch-action:none;}
-.palette{display:flex;gap:1.4%;align-items:center;flex-wrap:wrap;}
+#view-doodle{overflow:hidden;display:flex;flex-direction:column;}
+#doodle-wrap{display:flex;flex-direction:column;gap:1.6%;flex:1;min-height:0;}
+#doodle-canvas{flex:1;min-height:0;width:100%;background:#fff;border-radius:1.2vmin;box-shadow:var(--shadow);touch-action:none;}
+.palette{display:flex;gap:1.4%;align-items:center;flex-wrap:wrap;flex:none;justify-content:center;
+  padding-bottom:max(4px,env(safe-area-inset-bottom));}
 .swatch{width:clamp(24px,5.4vmin,42px);aspect-ratio:1;border-radius:50%;border:3px solid #fff;cursor:pointer;
   box-shadow:0 3px 6px rgba(0,0,0,.3);transition:transform .1s;}
 .swatch:active,.swatch.sel{transform:scale(1.18);outline:3px solid #ffd23e;}
@@ -256,11 +286,21 @@ html,body{margin:0;height:100%;height:100dvh;width:100%;
   width:clamp(36px,8vmin,56px);aspect-ratio:1;font-size:clamp(14px,3.4vmin,26px);cursor:pointer;box-shadow:0 4px 0 #4f9223;}
 .composer button:active{transform:translateY(3px);box-shadow:0 1px 0 #4f9223;}
 
-/* ---------- Camera (stub) ---------- */
-#cam{display:flex;flex-direction:column;align-items:center;gap:3%;height:100%;justify-content:center;}
+/* ---------- Camera (live camera + playful overlays) ---------- */
+#cam{display:flex;flex-direction:column;align-items:center;gap:2.4%;height:100%;justify-content:center;}
 .viewfinder{width:min(86%,60vmin);aspect-ratio:4/3;border-radius:2vmin;overflow:hidden;position:relative;
   background:linear-gradient(180deg,#bfe9ff,#7fc7f0);box-shadow:var(--shadow),inset 0 0 0 .8vmin rgba(255,255,255,.4);
   display:grid;place-items:center;font-size:18vmin;}
+.viewfinder video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
+.viewfinder video.mirror{transform:scaleX(-1);}
+.viewfinder .snapfreeze{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none;}
+.viewfinder .camscene.overlaymode{opacity:.5;}
+.camrow{display:flex;align-items:center;gap:6vmin;}
+.camctl{width:clamp(46px,9.5vmin,68px);aspect-ratio:1;border-radius:50%;border:none;cursor:pointer;
+  background:rgba(255,255,255,.28);display:grid;place-items:center;color:#fff;
+  box-shadow:0 4px 0 rgba(0,0,0,.2),inset 0 2px 0 rgba(255,255,255,.3);transition:transform .1s;}
+.camctl:active{transform:scale(.9);}
+.camctl svg{width:52%;height:52%;fill:none;stroke:#fff;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;}
 .viewfinder .grid-l{position:absolute;inset:0;background:
   linear-gradient(transparent 33%,rgba(255,255,255,.4) 33% 34%,transparent 34%),
   linear-gradient(transparent 66%,rgba(255,255,255,.4) 66% 67%,transparent 67%),
@@ -271,19 +311,28 @@ html,body{margin:0;height:100%;height:100dvh;width:100%;
 .shutter:active{transform:scale(.9);}
 .flash{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:999;}
 
-/* ---------- Tunes (stub) ---------- */
-#tunes{display:flex;flex-direction:column;align-items:center;gap:3%;text-align:center;color:#fff;}
-.cover{width:min(54%,40vmin);aspect-ratio:1;border-radius:2.4vmin;background:
-  linear-gradient(135deg,#ff6f9c,#b03ad6);display:grid;place-items:center;font-size:16vmin;
+/* ---------- Tunes ---------- */
+#tunes{display:flex;flex-direction:column;align-items:center;gap:2.4%;text-align:center;color:#fff;}
+.cover{width:min(44%,32vmin);aspect-ratio:1;border-radius:2.4vmin;background:
+  linear-gradient(135deg,#ff6f9c,#b03ad6);display:grid;place-items:center;
   box-shadow:var(--shadow);position:relative;overflow:hidden;}
-.cover.spin{animation:spin 6s linear infinite;}
+.cover .disc{width:88%;height:88%;border-radius:50%;overflow:hidden;margin:auto;
+  box-shadow:0 4px 14px rgba(0,0,0,.35);}
+.cover .disc .coverart{width:100%;height:100%;display:block;}
+.cover.spin .disc{animation:spin 5s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg)}}
-.track-title{font-size:clamp(14px,3.4vmin,28px);font-weight:900;}
+.track-title{font-size:clamp(15px,3.6vmin,30px);font-weight:900;}
 .track-sub{opacity:.85;font-weight:700;font-size:clamp(10px,2.3vmin,18px);}
-.transport{display:flex;align-items:center;gap:6%;font-size:clamp(24px,7vmin,52px);}
-.transport button{background:none;border:none;color:#fff;cursor:pointer;transition:transform .1s;}
-.transport button:active{transform:scale(.85);}
-.seek{width:80%;height:.9vmin;background:rgba(255,255,255,.35);border-radius:1em;overflow:hidden;}
+.transport{display:flex;align-items:center;gap:5vmin;margin-top:.6%;}
+.transport button{border:none;cursor:pointer;color:#fff;transition:transform .1s;
+  width:clamp(54px,11vmin,84px);aspect-ratio:1;border-radius:50%;display:grid;place-items:center;
+  background:linear-gradient(160deg,#9b6bff,#6a2fb0);
+  box-shadow:0 5px 0 rgba(0,0,0,.28),inset 0 2px 0 rgba(255,255,255,.3);}
+.transport button.playbtn{width:clamp(74px,15vmin,112px);
+  background:linear-gradient(160deg,#7dd13f,#4f9e23);}
+.transport button:active{transform:scale(.9);}
+.transport button .gi{width:46%;height:46%;}
+.seek{width:min(72%,520px);height:1.4vmin;min-height:8px;background:rgba(255,255,255,.35);border-radius:1em;overflow:hidden;}
 .seek i{display:block;height:100%;width:30%;background:#fff;}
 
 /* ---------- Settings (stub-ish, partly live) ---------- */
@@ -750,6 +799,7 @@ document.addEventListener('touchmove', function(e){
   if(e.touches && e.touches.length>1){ e.preventDefault(); return; } // no pinch
   let n=e.target;
   while(n && n!==document.body){
+    if(n.id==='caro'||n.id==='dock'){ if(n.scrollWidth>n.clientWidth+1) return; }
     if(n.classList && n.classList.contains('view') && n.scrollHeight>n.clientHeight+1) return;
     n=n.parentNode;
   }
@@ -867,7 +917,7 @@ const APPS = {
 };
 let current='home';
 function go(name,arg){
-  current=name; sfxTap(); stopTune();
+  current=name; sfxTap(); stopTune(); stopCam();
   view.innerHTML='';
   const v=el('div','view'); v.id='view-'+name; view.appendChild(v);
   (APPS[name]||renderHome)(v,arg);
@@ -894,20 +944,44 @@ const HOME_APPS=[
 function countRequests(){return Object.values(S.friends).filter(v=>!v).length;}
 
 function renderHome(v){
-  const wrap=el('div','home-wrap');
+  const launch=a=>{a.href?(location.href=a.href):go(a.id);};
   const greet=el('div','home-greet');
   greet.innerHTML=`<div class="av"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#frog"/></svg></div><div><h1>Hi, BonnieBoo!</h1><p>Welcome back to the Pond</p></div>`;
-  wrap.appendChild(greet);
-  const grid=el('div','grid');
+  /* the lilypad the icons hover over — it spins as you swipe */
+  const stage=el('div');stage.id='lilystage';
+  stage.innerHTML=`<svg viewBox="0 0 100 100" aria-hidden="true"><use href="#pop-lily"/></svg>`;
+  const caro=el('div');caro.id='caro';
   HOME_APPS.forEach(a=>{
-    const b=el('button','app');
     const n=a.badge?a.badge():0;
-    b.innerHTML=`<div class="ic"><svg class="ic-svg" viewBox="0 0 180 180" aria-hidden="true"><use href="#app-${a.id}"/></svg><span class="lily"></span>${n>0?`<span class="badge">${n}</span>`:''}</div><span>${a.label}</span>`;
-    b.onclick=()=>a.href?(location.href=a.href):go(a.id);
-    grid.appendChild(b);
+    const it=el('button','caro-item');
+    it.innerHTML=`<div class="cbig"><svg class="ic-svg" viewBox="0 0 180 180" aria-hidden="true"><use href="#app-${a.id}"/></svg>${n>0?`<span class="badge">${n}</span>`:''}</div><span>${a.label}</span>`;
+    it.onclick=()=>launch(a);
+    caro.appendChild(it);
   });
-  wrap.appendChild(grid);
-  v.appendChild(wrap);
+  const dock=el('div');dock.id='dock';
+  HOME_APPS.forEach(a=>{
+    const n=a.badge?a.badge():0;
+    const d=el('button','dockic');
+    d.title=a.label;
+    d.innerHTML=`<svg viewBox="0 0 180 180" aria-hidden="true"><use href="#app-${a.id}"/></svg>${n>0?`<span class="badge">${n}</span>`:''}`;
+    d.onclick=()=>launch(a);
+    dock.appendChild(d);
+  });
+  v.appendChild(greet);v.appendChild(stage);v.appendChild(caro);v.appendChild(dock);
+  const lily=stage.querySelector('svg');
+  function upd(){
+    const center=caro.scrollLeft+caro.clientWidth/2;
+    lily.style.transform=`rotate(${caro.scrollLeft*0.22}deg)`;
+    for(const it of caro.children){
+      const d=Math.abs(it.offsetLeft+it.offsetWidth/2-center);
+      const sc=Math.max(0.58,1-(d/caro.clientWidth)*1.1);
+      const big=it.firstElementChild;
+      big.style.transform=`scale(${sc}) translateY(${(1-sc)*26}px)`;
+      big.style.opacity=(0.55+sc*0.45).toFixed(2);
+    }
+  }
+  caro.addEventListener('scroll',()=>requestAnimationFrame(upd),{passive:true});
+  requestAnimationFrame(upd);
 }
 
 /* =====================================================================
@@ -1279,19 +1353,67 @@ function renderMessages(v){
 }
 
 /* =====================================================================
-   CAMERA  — stub viewfinder + shutter
+   CAMERA  — real iPad camera (front/back) with pond scene overlays
    ===================================================================== */
+let camStream=null;
+function stopCam(){if(camStream){try{camStream.getTracks().forEach(t=>t.stop());}catch(e){}camStream=null;}}
 function renderCamera(v){
   const head=el('div','app-head');head.innerHTML=`<span class="tab" style="background:#f0a91f">${SVG('app-camera','tabtile')} Camera</span>`;
   v.appendChild(head);
   const wrap=el('div',null);wrap.id='cam';
-  const scenes=['cam-pond','cam-frog','cam-room','cam-sunset'];let si=0;
-  const vf=el('div','viewfinder');vf.innerHTML=`<svg class="camscene" id="cam-scene"><use href="#${scenes[0]}"/></svg><div class="grid-l"></div>`;
+  const scenes=[null,'cam-pond','cam-frog','cam-room','cam-sunset'];let si=0,facing='environment',live=false;
+  const vf=el('div','viewfinder');
+  vf.innerHTML=`<video id="camvid" autoplay playsinline muted></video>
+    <canvas class="snapfreeze" id="camsnap"></canvas>
+    <svg class="camscene" id="cam-scene" style="display:none"><use href="#cam-pond"/></svg>
+    <div class="grid-l"></div>`;
+  const vid=vf.querySelector('#camvid'),snap=vf.querySelector('#camsnap'),scene=vf.querySelector('#cam-scene');
+  const row=el('div','camrow');
+  const flip=el('button','camctl');flip.innerHTML='<svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v4h4"/></svg>';
   const sh=el('button','shutter');
-  wrap.appendChild(vf);wrap.appendChild(sh);
+  const scn=el('button','camctl');scn.innerHTML=SVG('gl-leaf','gi');scn.querySelector('svg').style.cssText='width:52%;height:52%;fill:#fff;stroke:none;';
+  row.appendChild(flip);row.appendChild(sh);row.appendChild(scn);
+  wrap.appendChild(vf);wrap.appendChild(row);
   v.appendChild(wrap);
-  sh.onclick=()=>{const f=$('#flash');f.animate([{opacity:0},{opacity:.9},{opacity:0}],{duration:260});blip(900,.05,'square',.2);
-    si=(si+1)%scenes.length;$('#cam-scene use').setAttribute('href','#'+scenes[si]);toast('Snap! Saved to the Pond');};
+  function applyScene(){
+    if(si===0){scene.style.display='none';return;}
+    scene.style.display='';
+    scene.querySelector('use').setAttribute('href','#'+scenes[si]);
+    scene.classList.toggle('overlaymode',live);
+  }
+  async function startCam(){
+    stopCam();
+    try{
+      camStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:facing},audio:false});
+      vid.srcObject=camStream;live=true;
+      vid.style.display='';vid.classList.toggle('mirror',facing==='user');
+      applyScene();
+    }catch(e){
+      live=false;vid.style.display='none';
+      si=1;applyScene();scene.classList.remove('overlaymode');
+      toast('No camera here — pretend mode!');
+    }
+  }
+  flip.onclick=()=>{facing=facing==='environment'?'user':'environment';sfxTap();startCam();};
+  scn.onclick=()=>{si=(si+1)%scenes.length;if(!live&&si===0)si=1;applyScene();sfxTap();
+    toast(si===0?'No overlay':'Overlay: '+['','Pond','Froggy','Cozy room','Sunset'][si]);};
+  sh.onclick=()=>{
+    const f=$('#flash');f.animate([{opacity:0},{opacity:.9},{opacity:0}],{duration:260});
+    blip(900,.05,'square',.2);
+    if(live&&vid.videoWidth){
+      snap.width=vid.videoWidth;snap.height=vid.videoHeight;
+      const c=snap.getContext('2d');
+      if(facing==='user'){c.translate(snap.width,0);c.scale(-1,1);}
+      c.drawImage(vid,0,0);
+      snap.style.display='block';
+      setTimeout(()=>{snap.style.display='none';},1100);
+      toast('Snap! What a shot!');
+    }else{
+      si=(si%4)+1;applyScene();
+      toast('Snap! Saved to the Pond');
+    }
+  };
+  startCam();
 }
 
 /* =====================================================================
@@ -1308,9 +1430,9 @@ function renderTunes(v){
   const sub=el('div','track-sub');
   const seek=el('div','seek');seek.innerHTML='<i></i>';
   const tr=el('div','transport');
-  const prev=el('button',null,SVG('gl-prev','gi'));const play=el('button',null,SVG('gl-play','gi'));const next=el('button',null,SVG('gl-next','gi'));
+  const prev=el('button',null,SVG('gl-prev','gi'));const play=el('button','playbtn',SVG('gl-play','gi'));const next=el('button',null,SVG('gl-next','gi'));
   tr.appendChild(prev);tr.appendChild(play);tr.appendChild(next);
-  function set(){cover.innerHTML=SVG(tracks[i].cov,'coverart');title.textContent=tracks[i].t;sub.textContent=tracks[i].a;}
+  function set(){cover.innerHTML='<div class="disc">'+SVG(tracks[i].cov,'coverart')+'</div>';title.textContent=tracks[i].t;sub.textContent=tracks[i].a;}
   function setPlay(p){playing=p;play.innerHTML=SVG(playing?'gl-pause':'gl-play','gi');cover.classList.toggle('spin',playing);if(playing)startTune(tracks[i].cov);else stopTune();}
   play.onclick=()=>{setPlay(!playing);toast(playing?'Playing':'Paused');};
   next.onclick=()=>{i=(i+1)%tracks.length;set();sfxTap();if(playing)startTune(tracks[i].cov);};
