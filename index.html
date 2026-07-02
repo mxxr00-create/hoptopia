@@ -1,0 +1,1370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0e7d3a">
+<title>Lilypad OS — The Pond</title>
+<style>
+/* ============================================================
+   LILYPAD OS  —  a fan replica of the "Lilypad" toy tablet
+   operating system from the Toy Story 5 trailer.
+   Single-file web app, tuned for iPad Safari (landscape).
+   ============================================================ */
+
+:root{
+  --pond-top:#37b6ef;
+  --pond-mid:#1f98e0;
+  --pond-deep:#1574c2;
+  --lily:#57c23a;
+  --lily-dark:#3a9526;
+  --frog:#74c63f;
+  --frog-dark:#3f8a23;
+  --frog-belly:#a6e36a;
+  --grape:#6a2fb0;
+  --grape-lt:#8b46d6;
+  --grape-dk:#4c1d86;
+  --magenta:#cf3aa6;
+  --sun:#ffd23e;
+  --coral:#ff6f61;
+  --ink:#1a2a3a;
+  --white:#ffffff;
+  --shadow:0 10px 30px rgba(0,0,0,.35);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Nunito,"Baloo 2",system-ui,sans-serif;
+}
+
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{margin:0;height:100%;height:100dvh;width:100%;
+  position:fixed;inset:0;overflow:hidden;overscroll-behavior:none;
+  background:#0b0f14;
+  background:radial-gradient(120% 120% at 50% 0%,#1b2733 0%,#0b0f14 70%);
+  touch-action:manipulation;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;}
+
+/* ---------- Stage that holds & scales the device ---------- */
+#stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);}
+
+/* The whole green frog tablet. Aspect ~ 4:3. Scales to viewport. */
+#device{position:relative;width:100%;height:100%;}
+
+/* The OS fills the whole screen — the iPad's own frog case is the bezel. */
+#screen{
+  position:absolute; inset:0; width:100%; height:100%;
+  border-radius:0;
+  overflow:hidden;
+  background:#0f5fa0 url('assets/pond-wallpaper.jpg') center center / cover no-repeat;
+  box-shadow: inset 0 10px 30px rgba(255,255,255,.10), inset 0 -16px 40px rgba(4,40,80,.22);
+  cursor:default;
+}
+/* faint screen glare */
+#screen::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(115deg,rgba(255,255,255,.10) 0%,rgba(255,255,255,0) 22%);}
+
+/* floating bubbles & lilypads layer (decor behind UI) */
+.pond-decor{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:0;}
+.bubble{position:absolute;border-radius:50%;background:radial-gradient(circle at 30% 30%,rgba(255,255,255,.7),rgba(255,255,255,.05) 60%,transparent);animation:rise linear infinite;}
+@keyframes rise{0%{transform:translateY(110%) scale(.6);opacity:0}10%{opacity:.8}100%{transform:translateY(-20%) scale(1);opacity:0}}
+.padfloat{position:absolute;width:18%;aspect-ratio:1.25/1;background:
+   radial-gradient(60% 60% at 55% 45%,var(--lily) 0%,var(--lily-dark) 100%);
+   border-radius:50% 50% 50% 6%;opacity:.5;transform:rotate(-12deg);}
+
+/* ---------- OS chrome ---------- */
+#statusbar{position:absolute;top:0;left:0;right:0;height:8%;min-height:42px;z-index:30;
+  display:flex;align-items:center;justify-content:space-between;padding:0 3.5%;
+  color:#eaf6ff;font-weight:800;}
+.navgroup{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  display:flex;align-items:center;gap:1.4vmin;}
+.sbtn{width:clamp(26px,5vmin,46px);aspect-ratio:1;border-radius:50%;border:none;
+  background:rgba(255,255,255,.16);
+  display:grid;place-items:center;color:#eaf6ff;cursor:pointer;
+  transition:transform .12s, background .12s;}
+.sbtn:active{transform:scale(.9);background:rgba(255,255,255,.3);}
+.sbtn svg{width:56%;height:56%;fill:none;stroke:#eaf6ff;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;}
+#clock{font-size:clamp(11px,2.4vmin,20px);letter-spacing:.5px;text-shadow:0 1px 2px rgba(0,30,60,.4);}
+.battery{width:clamp(26px,5vmin,40px);height:clamp(13px,2.5vmin,20px);border:2px solid #eaf6ff;border-radius:3px;position:relative;}
+.battery::after{content:"";position:absolute;right:-4px;top:25%;height:50%;width:3px;background:#eaf6ff;border-radius:0 2px 2px 0;}
+.battery i{position:absolute;inset:2px;width:78%;background:#9be86a;border-radius:1px;}
+
+/* view host */
+#view{position:absolute;inset:8% 0 0 0;z-index:10;overflow:hidden;}
+.view{position:absolute;inset:0;overflow:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:none;padding:3% 4% 5%;
+  animation:viewin .32s cubic-bezier(.2,.9,.3,1);}
+@keyframes viewin{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
+.view::-webkit-scrollbar{width:0;height:0;}
+
+/* ---------- HOME ---------- */
+.home-greet{display:flex;align-items:center;gap:2.5%;color:#fff;margin:.2% 0 2%;
+  text-shadow:0 2px 4px rgba(0,40,80,.4);}
+.home-greet .av{width:clamp(34px,8vmin,64px);aspect-ratio:1;border-radius:50%;
+  background:radial-gradient(circle at 40% 35%,var(--frog-belly),var(--frog) 70%);
+  display:grid;place-items:center;font-size:clamp(20px,5vmin,40px);box-shadow:var(--shadow);}
+.home-greet h1{margin:0;font-size:clamp(15px,3.6vmin,30px);font-weight:900;}
+.home-greet p{margin:0;font-size:clamp(10px,2.2vmin,18px);opacity:.9;font-weight:700;}
+
+.home-wrap{max-width:min(100%,900px);margin:0 auto;}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:clamp(8px,2vmin,20px);align-content:start;justify-items:center;}
+.app{position:relative;display:flex;flex-direction:column;align-items:center;gap:.5em;
+  background:none;border:none;cursor:pointer;color:#fff;font-weight:800;
+  font-size:clamp(9px,2vmin,16px);text-shadow:0 1px 3px rgba(0,40,80,.55);
+  transition:transform .12s;}
+.app:active{transform:scale(.9);}
+.app .ic{width:min(100%,17vmin);aspect-ratio:1;position:relative;}
+.ic-svg{width:100%;height:100%;display:block;filter:drop-shadow(0 5px 10px rgba(0,40,70,.38));}
+.crit svg,.av svg,.friend .crit svg{width:90%;height:90%;display:block;}
+.app .lily{position:absolute;bottom:-6%;width:84%;height:22%;border-radius:50%;
+  background:radial-gradient(50% 60% at 50% 30%,rgba(60,160,60,.5),transparent);z-index:-1;}
+/* per-app icon colors */
+.ic-pond{background:linear-gradient(160deg,#7ad24a,#3f9826);}
+.ic-post{background:linear-gradient(160deg,#ff9a4d,#ef6b2a);}
+.ic-doodle{background:linear-gradient(160deg,#ff7aa8,#d63b86);}
+.ic-games{background:linear-gradient(160deg,#9b6bff,#6a2fb0);}
+.ic-msg{background:linear-gradient(160deg,#4dd2ff,#1f8fd0);}
+.ic-cam{background:linear-gradient(160deg,#ffd24d,#f0a91f);}
+.ic-tunes{background:linear-gradient(160deg,#ff6f9c,#b03ad6);}
+.ic-set{background:linear-gradient(160deg,#8fa6b8,#4f6577);}
+.badge{position:absolute;top:-6%;right:8%;min-width:1.6em;height:1.6em;padding:0 .35em;
+  background:var(--coral);border-radius:1em;color:#fff;font-size:clamp(8px,1.7vmin,13px);
+  display:grid;place-items:center;box-shadow:0 2px 5px rgba(0,0,0,.3);border:2px solid #fff;}
+
+/* ---------- generic app header ---------- */
+.app-head{display:flex;align-items:center;gap:2.5%;margin-bottom:3%;}
+.tab{display:inline-flex;align-items:center;gap:.4em;background:var(--magenta);color:#fff;
+  font-weight:900;padding:.35em .9em;border-radius:.7em .7em .2em .7em;
+  font-size:clamp(12px,3vmin,24px);box-shadow:0 4px 0 rgba(0,0,0,.15);
+  text-shadow:0 1px 2px rgba(0,0,0,.25);}
+.pill-btn{margin-left:auto;background:#7dd13f;color:#0c3a06;border:none;font-weight:900;
+  border-radius:1em;padding:.45em 1em;font-size:clamp(10px,2.2vmin,18px);cursor:pointer;
+  box-shadow:0 4px 0 #4f9223;display:inline-flex;align-items:center;gap:.35em;transition:transform .1s,box-shadow .1s;}
+.pill-btn:active{transform:translateY(3px);box-shadow:0 1px 0 #4f9223;}
+
+/* ---------- Friends / The Pond ---------- */
+.panel{background:linear-gradient(180deg,var(--grape-lt),var(--grape));
+  border-radius:1.4vmin;padding:3.5% 3.5% 4%;box-shadow:var(--shadow),inset 0 2px 0 rgba(255,255,255,.25);
+  margin-bottom:3%;}
+.req-row{display:flex;align-items:center;gap:3%;background:rgba(255,255,255,.12);
+  border-radius:1vmin;padding:2.4% 3%;margin-top:2.5%;}
+.req-row .who{display:flex;align-items:center;gap:2%;font-weight:800;color:#fff;}
+.crit{width:clamp(34px,8vmin,62px);aspect-ratio:1;border-radius:30%;display:grid;place-items:center;
+  font-size:clamp(20px,5vmin,40px);box-shadow:inset 0 -4px 8px rgba(0,0,0,.2),0 3px 6px rgba(0,0,0,.25);}
+.friend-strip{display:flex;gap:3%;justify-content:space-around;margin-top:3%;flex-wrap:wrap;}
+.friend{display:flex;flex-direction:column;align-items:center;gap:.4em;color:#fff;font-weight:800;
+  font-size:clamp(10px,2.3vmin,18px);}
+.friend .name{background:rgba(0,0,0,.18);padding:.15em .7em;border-radius:1em;}
+.friend.added .name{background:#7dd13f;color:#0c3a06;}
+.speech{display:inline-block;background:#fff;color:var(--ink);font-weight:800;border-radius:1em;
+  padding:.4em .9em;font-size:clamp(10px,2.2vmin,18px);box-shadow:0 3px 6px rgba(0,0,0,.2);position:relative;}
+.namechip{background:#eef7ff;color:var(--grape-dk);font-weight:900;border-radius:1em;padding:.3em .9em;
+  display:inline-block;font-size:clamp(11px,2.6vmin,20px);box-shadow:0 3px 6px rgba(0,0,0,.2);}
+.bonnie-row{display:flex;align-items:center;gap:2%;margin-bottom:3%;flex-wrap:wrap;}
+
+/* ---------- Posts (bulletin board) ---------- */
+.board{background:
+   repeating-linear-gradient(90deg,#b9772f,#b9772f 7%,#a9692a 7%,#a9692a 7.4%),
+   linear-gradient(#b9772f,#9c5f26);
+  border-radius:1.4vmin;padding:5% 4%;box-shadow:var(--shadow),inset 0 0 0 .6vmin #7d4a1c;
+  display:grid;grid-template-columns:repeat(3,1fr);gap:4%;}
+.note{position:relative;background:#fffef0;border-radius:.6vmin;padding:8% 6%;color:#3a2a18;
+  font-weight:800;text-align:center;min-height:7em;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:.4em;font-size:clamp(9px,2vmin,16px);
+  box-shadow:0 6px 12px rgba(0,0,0,.3);transition:transform .15s;}
+.note:nth-child(odd){transform:rotate(-2.2deg);}
+.note:nth-child(even){transform:rotate(1.8deg);}
+.note:active{transform:scale(1.04) rotate(0);}
+.note .pin{position:absolute;top:-7%;left:50%;transform:translateX(-50%);width:1.4em;height:1.4em;
+  border-radius:50%;background:radial-gradient(circle at 35% 30%,#ff8a8a,#c62828);box-shadow:0 2px 4px rgba(0,0,0,.4);}
+.note .emoji{font-size:clamp(22px,5.5vmin,46px);}
+.note.new::after{content:"NEW!";position:absolute;right:-6%;bottom:-8%;background:var(--coral);color:#fff;
+  font-size:clamp(8px,1.7vmin,13px);font-weight:900;padding:.2em .5em;border-radius:.3em;transform:rotate(8deg);
+  box-shadow:0 2px 5px rgba(0,0,0,.35);}
+
+/* ---------- Doodle ---------- */
+#doodle-wrap{display:flex;flex-direction:column;gap:2%;height:100%;}
+#doodle-canvas{flex:1;width:100%;background:#fff;border-radius:1.2vmin;box-shadow:var(--shadow);touch-action:none;}
+.palette{display:flex;gap:1.4%;align-items:center;flex-wrap:wrap;}
+.swatch{width:clamp(24px,5.4vmin,42px);aspect-ratio:1;border-radius:50%;border:3px solid #fff;cursor:pointer;
+  box-shadow:0 3px 6px rgba(0,0,0,.3);transition:transform .1s;}
+.swatch:active,.swatch.sel{transform:scale(1.18);outline:3px solid #ffd23e;}
+
+/* ---------- Games menu ---------- */
+.game-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:4%;}
+.game-card{border:none;cursor:pointer;border-radius:1.6vmin;padding:7% 5%;color:#fff;font-weight:900;
+  display:flex;flex-direction:column;align-items:center;gap:.4em;font-size:clamp(11px,2.6vmin,22px);
+  box-shadow:var(--shadow),inset 0 3px 0 rgba(255,255,255,.3);text-shadow:0 2px 3px rgba(0,0,0,.3);transition:transform .12s;}
+.game-card:active{transform:scale(.95);}
+.game-card .big{font-size:clamp(30px,8vmin,64px);}
+.gc-1{background:linear-gradient(160deg,#ff7e5f,#feb47b);}
+.gc-2{background:linear-gradient(160deg,#43cea2,#185a9d);}
+.gc-3{background:linear-gradient(160deg,#c471f5,#fa71cd);}
+.gc-4{background:linear-gradient(160deg,#f7971e,#ffd200);}
+
+/* Guess Who game */
+#guess{display:flex;flex-direction:column;align-items:center;gap:2%;text-align:center;color:#fff;}
+#guess .round{font-size:clamp(18px,4.6vmin,40px);font-weight:900;color:var(--sun);letter-spacing:2px;text-shadow:0 3px 0 #b07d00;margin:.2em 0;}
+.pixel-box{width:min(48%,30vmin);aspect-ratio:1;border-radius:2vmin;overflow:hidden;box-shadow:var(--shadow);
+  display:grid;place-items:center;font-size:13vmin;background:#fff;position:relative;}
+.pixel-box .meter{position:absolute;top:6%;left:10%;right:10%;height:8%;background:rgba(255,255,255,.4);border-radius:1em;overflow:hidden;}
+.pixel-box .meter i{display:block;height:100%;background:linear-gradient(90deg,#ffd23e,#ff6f61);width:100%;}
+.guess-opts{display:grid;grid-template-columns:repeat(2,1fr);gap:3%;width:80%;}
+.guess-opts button{border:none;cursor:pointer;background:#fff;color:var(--grape-dk);font-weight:900;
+  padding:.7em;border-radius:1em;font-size:clamp(11px,2.6vmin,20px);box-shadow:0 4px 0 rgba(0,0,0,.2);transition:transform .1s;}
+.guess-opts button:active{transform:translateY(3px);}
+.guess-opts button.right{background:#7dd13f;}
+.guess-opts button.wrong{background:#ff6f61;color:#fff;}
+
+/* ===== Bubble Pop game ===== */
+#pop-area{position:relative;width:100%;height:100%;overflow:hidden;border-radius:1.4vmin;
+  background:#1f8ace;box-shadow:inset 0 0 40px rgba(0,0,0,.25);touch-action:none;}
+.pop-bg{position:absolute;inset:0;z-index:0;}
+.pop-bg svg{width:100%;height:100%;display:block;}
+.pop-item{position:absolute;border:none;background:none;padding:0;cursor:pointer;z-index:2;will-change:transform;}
+.pop-item svg{width:100%;height:100%;display:block;filter:drop-shadow(0 3px 5px rgba(0,30,60,.3));pointer-events:none;}
+.pop-hud{position:absolute;top:0;left:0;right:0;z-index:5;display:flex;align-items:center;gap:2.5%;padding:2.4% 3.5%;pointer-events:none;}
+.hud-chip{font-weight:900;color:#fff;border-radius:1em;padding:.32em .85em;font-size:clamp(12px,3vmin,22px);
+  box-shadow:0 4px 0 rgba(0,0,0,.18),inset 0 2px 0 rgba(255,255,255,.3);display:inline-flex;align-items:center;gap:.3em;white-space:nowrap;}
+.chip-round{background:linear-gradient(160deg,#9b6bff,#6a2fb0);}
+.chip-score{background:linear-gradient(160deg,#ffe066,#f0a51c);color:#5a3a00;font-size:clamp(15px,3.8vmin,30px);}
+.chip-time{background:linear-gradient(160deg,#4dd2ff,#1f8fd0);margin-left:auto;}
+.score-bump{animation:bump .32s;}
+@keyframes bump{0%{transform:scale(1)}40%{transform:scale(1.28)}100%{transform:scale(1)}}
+.time-bar{position:absolute;top:0;left:0;height:6px;width:100%;z-index:6;border-radius:0 4px 4px 0;
+  background:linear-gradient(90deg,#ff6f61,#ffd23e 45%,#7dd13f);transition:width .25s linear;}
+.pop-pop{position:absolute;z-index:7;font-weight:900;pointer-events:none;text-shadow:0 2px 3px rgba(0,0,0,.35);transform:translate(-50%,-50%);}
+.pop-overlay{position:absolute;inset:0;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:3%;text-align:center;color:#fff;background:rgba(8,30,55,.5);backdrop-filter:blur(3px);padding:5%;}
+.pop-overlay h2{margin:0;font-size:clamp(22px,6vmin,52px);font-weight:900;color:#ffe066;text-shadow:0 3px 0 rgba(0,0,0,.25);}
+.pop-overlay p{margin:0;font-weight:800;font-size:clamp(12px,3vmin,22px);max-width:82%;opacity:.95;}
+.big-btn{border:none;cursor:pointer;background:linear-gradient(160deg,#7dd13f,#4f9e23);color:#0c3a06;font-weight:900;
+  border-radius:1.4em;padding:.6em 1.5em;font-size:clamp(15px,4vmin,30px);box-shadow:0 6px 0 #3a7a18;pointer-events:auto;}
+.big-btn:active{transform:translateY(4px);box-shadow:0 2px 0 #3a7a18;}
+.tip-row{display:flex;gap:3%;justify-content:center;flex-wrap:wrap;}
+.tip-row b{display:inline-flex;align-items:center;gap:.3em;background:rgba(255,255,255,.16);padding:.3em .7em;border-radius:1em;
+  font-size:clamp(11px,2.6vmin,18px);}
+.tip-row b svg{width:1.5em;height:1.5em;}
+
+/* ---------- Messages ---------- */
+.chat{display:flex;flex-direction:column;gap:2.5%;}
+.msg{max-width:78%;padding:.6em 1em;border-radius:1.2em;font-weight:700;font-size:clamp(11px,2.5vmin,19px);
+  box-shadow:0 3px 6px rgba(0,0,0,.18);line-height:1.25;}
+.msg.them{background:#fff;color:var(--ink);align-self:flex-start;border-bottom-left-radius:.2em;}
+.msg.me{background:#7dd13f;color:#0c3a06;align-self:flex-end;border-bottom-right-radius:.2em;}
+.chat-from{font-size:clamp(9px,2vmin,15px);font-weight:800;color:#eaf6ff;margin-left:.6em;margin-top:1.5%;}
+.composer{display:flex;gap:2%;margin-top:3%;}
+.composer input{flex:1;border:none;border-radius:1.4em;padding:.6em 1em;font-size:clamp(11px,2.4vmin,18px);
+  background:#fff;color:var(--ink);font-weight:700;}
+.composer button{border:none;background:#7dd13f;color:#0c3a06;font-weight:900;border-radius:50%;
+  width:clamp(36px,8vmin,56px);aspect-ratio:1;font-size:clamp(14px,3.4vmin,26px);cursor:pointer;box-shadow:0 4px 0 #4f9223;}
+.composer button:active{transform:translateY(3px);box-shadow:0 1px 0 #4f9223;}
+
+/* ---------- Camera (stub) ---------- */
+#cam{display:flex;flex-direction:column;align-items:center;gap:3%;height:100%;justify-content:center;}
+.viewfinder{width:min(86%,60vmin);aspect-ratio:4/3;border-radius:2vmin;overflow:hidden;position:relative;
+  background:linear-gradient(180deg,#bfe9ff,#7fc7f0);box-shadow:var(--shadow),inset 0 0 0 .8vmin rgba(255,255,255,.4);
+  display:grid;place-items:center;font-size:18vmin;}
+.viewfinder .grid-l{position:absolute;inset:0;background:
+  linear-gradient(transparent 33%,rgba(255,255,255,.4) 33% 34%,transparent 34%),
+  linear-gradient(transparent 66%,rgba(255,255,255,.4) 66% 67%,transparent 67%),
+  linear-gradient(90deg,transparent 33%,rgba(255,255,255,.4) 33% 34%,transparent 34%),
+  linear-gradient(90deg,transparent 66%,rgba(255,255,255,.4) 66% 67%,transparent 67%);}
+.shutter{width:clamp(48px,12vmin,90px);aspect-ratio:1;border-radius:50%;border:.7vmin solid #fff;
+  background:#ff6f61;cursor:pointer;box-shadow:0 6px 12px rgba(0,0,0,.35);transition:transform .1s;}
+.shutter:active{transform:scale(.9);}
+.flash{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:999;}
+
+/* ---------- Tunes (stub) ---------- */
+#tunes{display:flex;flex-direction:column;align-items:center;gap:3%;text-align:center;color:#fff;}
+.cover{width:min(54%,40vmin);aspect-ratio:1;border-radius:2.4vmin;background:
+  linear-gradient(135deg,#ff6f9c,#b03ad6);display:grid;place-items:center;font-size:16vmin;
+  box-shadow:var(--shadow);position:relative;overflow:hidden;}
+.cover.spin{animation:spin 6s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.track-title{font-size:clamp(14px,3.4vmin,28px);font-weight:900;}
+.track-sub{opacity:.85;font-weight:700;font-size:clamp(10px,2.3vmin,18px);}
+.transport{display:flex;align-items:center;gap:6%;font-size:clamp(24px,7vmin,52px);}
+.transport button{background:none;border:none;color:#fff;cursor:pointer;transition:transform .1s;}
+.transport button:active{transform:scale(.85);}
+.seek{width:80%;height:.9vmin;background:rgba(255,255,255,.35);border-radius:1em;overflow:hidden;}
+.seek i{display:block;height:100%;width:30%;background:#fff;}
+
+/* ---------- Settings (stub-ish, partly live) ---------- */
+.set-row{display:flex;align-items:center;gap:3%;background:rgba(255,255,255,.14);border-radius:1.2vmin;
+  padding:3% 4%;margin-bottom:2.5%;color:#fff;font-weight:800;font-size:clamp(11px,2.6vmin,20px);}
+.set-row .ic2{font-size:clamp(20px,5vmin,40px);}
+.toggle{margin-left:auto;width:clamp(46px,10vmin,72px);height:clamp(26px,5.6vmin,40px);border-radius:1em;
+  background:rgba(0,0,0,.3);position:relative;cursor:pointer;transition:background .2s;flex:none;}
+.toggle.on{background:#7dd13f;}
+.toggle b{position:absolute;top:8%;left:6%;height:84%;aspect-ratio:1;border-radius:50%;background:#fff;
+  transition:left .2s;box-shadow:0 2px 4px rgba(0,0,0,.3);}
+.toggle.on b{left:54%;}
+.slider{margin-left:auto;width:46%;}
+.slider input{width:100%;}
+
+.toast{position:absolute;left:50%;bottom:6%;transform:translateX(-50%) translateY(20px);
+  background:rgba(20,40,60,.92);color:#fff;font-weight:800;padding:.6em 1.2em;border-radius:1.4em;
+  font-size:clamp(11px,2.4vmin,18px);opacity:0;z-index:50;pointer-events:none;transition:.3s;white-space:nowrap;}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+/* ---- inline icon system ---- */
+.gi{width:1.15em;height:1.15em;display:inline-block;vertical-align:-.18em;flex:none;}
+.tabtile{width:1.55em;height:1.55em;border-radius:.34em;vertical-align:-.4em;flex:none;}
+.cardic{width:46%;height:46%;}
+.note .noteic{width:clamp(28px,6.5vmin,50px);height:clamp(28px,6.5vmin,50px);}
+.set-row .ic2{display:inline-flex;}
+.set-row .ic2 svg{width:1.2em;height:1.2em;}
+.cover .coverart{width:100%;height:100%;display:block;border-radius:inherit;}
+.camscene{position:absolute;inset:0;width:100%;height:100%;display:block;}
+.sendic{width:54%;height:54%;}
+.h2ic{width:1em;height:1em;vertical-align:-.12em;}
+.chipic{width:1.1em;height:1.1em;vertical-align:-.16em;}
+.round .roundic{width:1em;height:1em;vertical-align:-.1em;}
+.pixel-box .gfsvg{width:100%;height:100%;display:block;}
+/* ---- Ribbit (kids' forum) ---- */
+.ribbit-sort{display:flex;gap:2.5%;margin-bottom:3%;}
+.ribbit-sort button{border:none;cursor:pointer;background:rgba(255,255,255,.18);color:#eaffff;font-weight:800;
+  border-radius:1em;padding:.4em 1em;font-size:clamp(10px,2.4vmin,18px);display:inline-flex;align-items:center;gap:.35em;}
+.ribbit-sort button.on{background:#1fb37e;color:#05311f;}
+.ribbit-sort .gi{width:1.15em;height:1.15em;}
+.rib{display:flex;gap:3%;background:#fff;border-radius:1.4vmin;padding:2.8% 3.2%;margin-bottom:2.4%;
+  box-shadow:0 4px 10px rgba(0,40,70,.18);}
+.rib-vote{display:flex;flex-direction:column;align-items:center;gap:.1em;color:#33424f;font-weight:900;flex:none;}
+.rib-vote button{border:none;background:none;cursor:pointer;color:#b3bfca;width:1.7em;height:1.7em;padding:0;display:grid;place-items:center;border-radius:.4em;transition:transform .1s;}
+.rib-vote button:active{transform:scale(.85);}
+.rib-vote button .gi{width:1.6em;height:1.6em;}
+.rib-vote button.up.on{color:#ff7a3d;}
+.rib-vote button.down.on{color:#4a90e2;}
+.rib-vote .count{font-size:clamp(12px,2.9vmin,21px);}
+.rib-body{flex:1;min-width:0;}
+.rib-meta{display:flex;align-items:center;gap:.5em;font-size:clamp(9px,2.1vmin,15px);color:#7c8a98;font-weight:800;margin-bottom:.3em;flex-wrap:wrap;}
+.rib-comm{display:inline-flex;align-items:center;gap:.35em;color:#1fa372;}
+.rib-comm .cico{width:1.5em;height:1.5em;border-radius:50%;background:#e6f7f0;display:inline-grid;place-items:center;}
+.rib-comm .cico .gi{width:1.2em;height:1.2em;}
+.rib-title{font-weight:800;color:#21303c;font-size:clamp(12px,2.8vmin,21px);line-height:1.2;}
+.rib-foot{display:flex;align-items:center;gap:1.1em;margin-top:.5em;color:#8c98a4;font-weight:800;font-size:clamp(9px,2.1vmin,15px);}
+.rib-foot span{display:inline-flex;align-items:center;gap:.35em;}
+.rib-foot .gi{width:1.25em;height:1.25em;}
+.hint{position:fixed;bottom:8px;left:0;right:0;text-align:center;color:#5a6b7a;font-size:12px;z-index:1;}
+@media (orientation:portrait){ .hint b{color:#ffd23e;} }
+</style>
+</head>
+<body>
+<!-- ============ ILLUSTRATED ICON SPRITE (built with the svg-creator skill) ============ -->
+<svg id="sprite" width="0" height="0" style="position:absolute" aria-hidden="true">
+<defs>
+  <linearGradient id="bg-pond" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#5cc8f7"/><stop offset="45%" stop-color="#2ea6e8"/><stop offset="100%" stop-color="#1781cc"/></linearGradient>
+  <linearGradient id="bg-posts" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ffc06a"/><stop offset="45%" stop-color="#ff8f42"/><stop offset="100%" stop-color="#ef6a23"/></linearGradient>
+  <linearGradient id="bg-doodle" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ff9cbd"/><stop offset="45%" stop-color="#f25c97"/><stop offset="100%" stop-color="#d63b86"/></linearGradient>
+  <linearGradient id="bg-games" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#b48cff"/><stop offset="45%" stop-color="#8a52e6"/><stop offset="100%" stop-color="#6a2fb0"/></linearGradient>
+  <linearGradient id="bg-messages" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#7fdcff"/><stop offset="45%" stop-color="#36b3f0"/><stop offset="100%" stop-color="#1f8fd0"/></linearGradient>
+  <linearGradient id="bg-camera" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ffe072"/><stop offset="45%" stop-color="#ffc232"/><stop offset="100%" stop-color="#f0a51c"/></linearGradient>
+  <linearGradient id="bg-tunes" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ff95bd"/><stop offset="45%" stop-color="#de5bd0"/><stop offset="100%" stop-color="#b03ad6"/></linearGradient>
+  <linearGradient id="bg-settings" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#b6c3d0"/><stop offset="45%" stop-color="#8295a4"/><stop offset="100%" stop-color="#56697a"/></linearGradient>
+  <radialGradient id="gFrog" cx="42%" cy="34%" r="75%"><stop offset="0%" stop-color="#aef07a"/><stop offset="55%" stop-color="#74cb43"/><stop offset="100%" stop-color="#4d9a25"/></radialGradient>
+  <radialGradient id="gBelly" cx="50%" cy="40%" r="70%"><stop offset="0%" stop-color="#d7f7a8"/><stop offset="100%" stop-color="#9fe06a"/></radialGradient>
+  <radialGradient id="gWhite" cx="40%" cy="35%" r="75%"><stop offset="0%" stop-color="#ffffff"/><stop offset="100%" stop-color="#e6eef2"/></radialGradient>
+  <linearGradient id="gPalette" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#fff6e6"/><stop offset="100%" stop-color="#f2d9a8"/></linearGradient>
+  <radialGradient id="gLady" cx="40%" cy="30%" r="80%"><stop offset="0%" stop-color="#ff6b8a"/><stop offset="55%" stop-color="#e23a78"/><stop offset="100%" stop-color="#b5276a"/></radialGradient>
+  <radialGradient id="gBeaver" cx="42%" cy="32%" r="80%"><stop offset="0%" stop-color="#d99a55"/><stop offset="55%" stop-color="#b9762f"/><stop offset="100%" stop-color="#8a531c"/></radialGradient>
+  <radialGradient id="gKara" cx="42%" cy="30%" r="80%"><stop offset="0%" stop-color="#b98cff"/><stop offset="55%" stop-color="#8a52e6"/><stop offset="100%" stop-color="#5e2aa0"/></radialGradient>
+  <linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ffffff" stop-opacity=".55"/><stop offset="55%" stop-color="#ffffff" stop-opacity="0"/></linearGradient>
+  <linearGradient id="shade" x1="0" y1="0" x2="0" y2="1"><stop offset="60%" stop-color="#000000" stop-opacity="0"/><stop offset="100%" stop-color="#001428" stop-opacity=".18"/></linearGradient>
+  <linearGradient id="paper" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ffffff"/><stop offset="100%" stop-color="#fbeccb"/></linearGradient>
+  <linearGradient id="paper2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#fff3da"/><stop offset="100%" stop-color="#ffe2ad"/></linearGradient>
+  <radialGradient id="pin" cx="38%" cy="32%" r="70%"><stop offset="0%" stop-color="#ff8a7a"/><stop offset="60%" stop-color="#ef4a3a"/><stop offset="100%" stop-color="#c5302a"/></radialGradient>
+  <linearGradient id="palette" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#fff6e6"/><stop offset="100%" stop-color="#eed3a0"/></linearGradient>
+  <linearGradient id="wood" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#caa05e"/><stop offset="100%" stop-color="#9b6b34"/></linearGradient>
+  <linearGradient id="padBody" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ffffff"/><stop offset="55%" stop-color="#efe2ff"/><stop offset="100%" stop-color="#d7c2f2"/></linearGradient>
+  <radialGradient id="lens" cx="38%" cy="34%" r="72%"><stop offset="0%" stop-color="#bdeaff"/><stop offset="40%" stop-color="#39a0e6"/><stop offset="80%" stop-color="#0f5fa0"/><stop offset="100%" stop-color="#08304f"/></radialGradient>
+  <linearGradient id="camBody" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#525c69"/><stop offset="100%" stop-color="#2b323c"/></linearGradient>
+  <linearGradient id="note" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ffffff"/><stop offset="100%" stop-color="#e9eef5"/></linearGradient>
+  <linearGradient id="metal" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#f4f8fb"/><stop offset="50%" stop-color="#cdd8e2"/><stop offset="100%" stop-color="#93a4b4"/></linearGradient>
+  <radialGradient id="bubbleW" cx="40%" cy="35%" r="75%"><stop offset="0%" stop-color="#ffffff"/><stop offset="100%" stop-color="#e7f6ff"/></radialGradient>
+  <filter id="soft" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="linearRGB">
+    <feGaussianBlur in="SourceAlpha" stdDeviation="2.2" result="b"/><feOffset in="b" dx="0" dy="2.6" result="o"/>
+    <feFlood flood-color="#15324e" flood-opacity="0.30" result="c"/><feComposite in="c" in2="o" operator="in" result="s"/>
+    <feMerge><feMergeNode in="s"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+
+  <symbol id="frog" viewBox="0 0 100 100">
+    <g filter="url(#soft)">
+      <ellipse cx="29" cy="33" rx="17" ry="17" fill="url(#gFrog)" stroke="#3a8020" stroke-width="2.4"/>
+      <ellipse cx="71" cy="33" rx="17" ry="17" fill="url(#gFrog)" stroke="#3a8020" stroke-width="2.4"/>
+      <path d="M16 56 C16 34 30 26 50 26 C70 26 84 34 84 56 C84 76 70 86 50 86 C30 86 16 76 16 56Z" fill="url(#gFrog)" stroke="#3a8020" stroke-width="2.4"/>
+      <ellipse cx="50" cy="64" rx="22" ry="18" fill="url(#gBelly)" opacity=".55"/>
+    </g>
+    <circle cx="29" cy="34" r="11" fill="url(#gWhite)"/><circle cx="71" cy="34" r="11" fill="url(#gWhite)"/>
+    <circle cx="31" cy="37" r="5.4" fill="#16242e"/><circle cx="69" cy="37" r="5.4" fill="#16242e"/>
+    <circle cx="33" cy="35" r="1.9" fill="#fff"/><circle cx="71" cy="35" r="1.9" fill="#fff"/>
+    <ellipse cx="44" cy="55" rx="1.7" ry="2.2" fill="#36702a"/><ellipse cx="56" cy="55" rx="1.7" ry="2.2" fill="#36702a"/>
+    <path d="M38 64 Q50 75 62 64" fill="none" stroke="#2f6e18" stroke-width="3" stroke-linecap="round"/>
+    <g fill="#ff9bb0" opacity=".5"><circle cx="30" cy="64" r="3.6"/><circle cx="70" cy="64" r="3.6"/></g>
+  </symbol>
+  <symbol id="lady" viewBox="0 0 100 100">
+    <g stroke="#2a1018" stroke-width="2"><line x1="40" y1="26" x2="33" y2="14"/><line x1="60" y1="26" x2="67" y2="14"/></g>
+    <circle cx="33" cy="13" r="3.4" fill="#2a1018"/><circle cx="67" cy="13" r="3.4" fill="#2a1018"/>
+    <g filter="url(#soft)"><path d="M22 56 C22 34 34 24 50 24 C66 24 78 34 78 56 C78 78 66 88 50 88 C34 88 22 78 22 56Z" fill="url(#gLady)" stroke="#8c1f54" stroke-width="2.2"/></g>
+    <path d="M50 24 C40 24 30 30 26 44 L74 44 C70 30 60 24 50 24Z" fill="#2a1018"/>
+    <circle cx="41" cy="35" r="3.4" fill="#fff"/><circle cx="59" cy="35" r="3.4" fill="#fff"/>
+    <line x1="50" y1="44" x2="50" y2="86" stroke="#7a1648" stroke-width="2"/>
+    <g fill="#2a1018"><circle cx="37" cy="58" r="5"/><circle cx="63" cy="58" r="5"/><circle cx="40" cy="74" r="4.4"/><circle cx="60" cy="74" r="4.4"/></g>
+    <ellipse cx="36" cy="44" rx="6" ry="4" fill="#ffffff" opacity=".25"/>
+  </symbol>
+  <symbol id="beaver" viewBox="0 0 100 100">
+    <g filter="url(#soft)">
+      <circle cx="28" cy="30" r="11" fill="url(#gBeaver)" stroke="#6f4015" stroke-width="2"/><circle cx="72" cy="30" r="11" fill="url(#gBeaver)" stroke="#6f4015" stroke-width="2"/>
+      <circle cx="28" cy="30" r="5" fill="#5b3210"/><circle cx="72" cy="30" r="5" fill="#5b3210"/>
+      <path d="M20 52 C20 32 33 24 50 24 C67 24 80 32 80 52 C80 74 67 84 50 84 C33 84 20 74 20 52Z" fill="url(#gBeaver)" stroke="#6f4015" stroke-width="2.4"/>
+    </g>
+    <ellipse cx="50" cy="60" rx="20" ry="16" fill="#e7c089" opacity=".7"/>
+    <circle cx="39" cy="46" r="5.6" fill="#fff"/><circle cx="61" cy="46" r="5.6" fill="#fff"/>
+    <circle cx="40" cy="47" r="2.8" fill="#2a1608"/><circle cx="60" cy="47" r="2.8" fill="#2a1608"/>
+    <ellipse cx="50" cy="60" rx="5" ry="3.6" fill="#3a1f0c"/>
+    <path d="M50 63 V70" stroke="#3a1f0c" stroke-width="2"/>
+    <rect x="44.5" y="70" width="5" height="9" rx="1.4" fill="#fff" stroke="#cbb38a" stroke-width="1"/><rect x="50.5" y="70" width="5" height="9" rx="1.4" fill="#fff" stroke="#cbb38a" stroke-width="1"/>
+  </symbol>
+  <symbol id="kara" viewBox="0 0 100 100">
+    <g filter="url(#soft)">
+      <path d="M50 18 C71 18 86 34 86 56 C86 80 70 90 50 90 C30 90 14 80 14 56 C14 34 29 18 50 18Z" fill="url(#gKara)" stroke="#4e2390" stroke-width="2.4"/>
+    </g>
+    <g fill="url(#gKara)" stroke="#4e2390" stroke-width="1.6"><path d="M40 19 l-3 -9 6 2z"/><path d="M52 17 l1 -10 5 5z"/><path d="M64 21 l6 -7 1 7z"/></g>
+    <ellipse cx="50" cy="55" rx="24" ry="18" fill="#caa6ff" opacity=".35"/>
+    <circle cx="38" cy="48" r="9" fill="#fff"/><circle cx="62" cy="48" r="9" fill="#fff"/>
+    <circle cx="39" cy="50" r="4.4" fill="#241038"/><circle cx="61" cy="50" r="4.4" fill="#241038"/>
+    <circle cx="41" cy="48" r="1.6" fill="#fff"/><circle cx="63" cy="48" r="1.6" fill="#fff"/>
+    <path d="M40 68 Q50 78 60 68" fill="#3a1860" stroke="#3a1860" stroke-width="2" stroke-linecap="round"/>
+    <g fill="#ff9be0" opacity=".5"><circle cx="30" cy="64" r="4"/><circle cx="70" cy="64" r="4"/></g>
+  </symbol>
+
+  <symbol id="app-pond" viewBox="0 0 180 180">
+    <rect width="180" height="180" rx="40" fill="url(#bg-pond)"/><rect width="180" height="180" rx="40" fill="url(#gloss)"/>
+    <use href="#frog" x="28" y="26" width="124" height="124"/>
+  </symbol>
+  <symbol id="app-posts" viewBox="0 0 180 180">
+    <rect width="180" height="180" rx="40" fill="url(#bg-posts)"/>
+    <g filter="url(#soft)">
+      <rect x="52" y="58" width="84" height="80" rx="9" fill="url(#paper2)" transform="rotate(7 94 98)"/>
+      <rect x="46" y="52" width="88" height="84" rx="9" fill="url(#paper)" transform="rotate(-5 90 94)"/>
+    </g>
+    <g transform="rotate(-5 90 94)" stroke-linecap="round">
+      <line x1="60" y1="74" x2="116" y2="74" stroke="#f0a51c" stroke-width="6"/>
+      <line x1="60" y1="92" x2="110" y2="92" stroke="#c7b187" stroke-width="5"/>
+      <line x1="60" y1="108" x2="118" y2="108" stroke="#c7b187" stroke-width="5"/>
+      <path d="M96 120 q8 -10 16 0 q-8 10 -16 0Z" fill="#ff6f87"/>
+    </g>
+    <g filter="url(#soft)"><circle cx="90" cy="48" r="12" fill="url(#pin)"/></g>
+    <circle cx="86" cy="44" r="3.4" fill="#fff" opacity=".75"/>
+    <rect width="180" height="180" rx="40" fill="url(#gloss)"/><rect width="180" height="180" rx="40" fill="url(#shade)"/>
+  </symbol>
+  <symbol id="app-doodle" viewBox="0 0 180 180">
+    <rect width="180" height="180" rx="40" fill="url(#bg-doodle)"/>
+    <g filter="url(#soft)" transform="translate(80,94)">
+      <path d="M0 -46 C32 -46 52 -22 52 5 C52 24 37 30 24 30 C15 30 13 39 5 43 C-26 56 -54 31 -54 -3 C-54 -30 -32 -46 0 -46Z" fill="url(#palette)" stroke="#d3ad6a" stroke-width="2"/>
+      <ellipse cx="3" cy="23" rx="12" ry="10" fill="#cf3f86"/><ellipse cx="3" cy="21" rx="12" ry="10" fill="#fff"/>
+    </g>
+    <g transform="translate(80,94)">
+      <circle cx="-30" cy="-15" r="8" fill="#e23a78"/><circle cx="-32" cy="-18" r="2.4" fill="#fff" opacity=".7"/>
+      <circle cx="-9" cy="-28" r="8" fill="#f0a51c"/><circle cx="-11" cy="-31" r="2.4" fill="#fff" opacity=".7"/>
+      <circle cx="16" cy="-25" r="8" fill="#36b3f0"/><circle cx="14" cy="-28" r="2.4" fill="#fff" opacity=".7"/>
+      <circle cx="33" cy="-4" r="8" fill="#5fbf3a"/><circle cx="31" cy="-7" r="2.4" fill="#fff" opacity=".7"/>
+    </g>
+    <g filter="url(#soft)" transform="translate(120,120) rotate(38)">
+      <rect x="-5" y="-52" width="10" height="42" rx="4" fill="url(#wood)"/>
+      <rect x="-6" y="-14" width="12" height="8" rx="2" fill="#d7dde3"/>
+      <path d="M-6 -7 h12 v9 q0 9 -6 9 q-6 0 -6 -9Z" fill="#cf3f86"/>
+      <path d="M-6 -7 h12 v4 h-12Z" fill="#a82e6e"/>
+    </g>
+    <rect width="180" height="180" rx="40" fill="url(#gloss)"/><rect width="180" height="180" rx="40" fill="url(#shade)"/>
+  </symbol>
+  <symbol id="app-games" viewBox="0 0 180 180">
+    <rect width="180" height="180" rx="40" fill="url(#bg-games)"/>
+    <g filter="url(#soft)" transform="translate(90,96)">
+      <g fill="url(#padBody)">
+        <ellipse cx="-34" cy="16" rx="19" ry="23"/><ellipse cx="34" cy="16" rx="19" ry="23"/>
+        <rect x="-47" y="-26" width="94" height="46" rx="22"/>
+      </g>
+    </g>
+    <g transform="translate(90,96)">
+      <g fill="#4a2390"><rect x="-45" y="-8" width="11" height="28" rx="3.5"/><rect x="-53.5" y="0.5" width="28" height="11" rx="3.5"/></g>
+      <circle cx="35" cy="-7" r="6" fill="#ff5a5a"/><circle cx="48" cy="6" r="6" fill="#ffd23e"/><circle cx="22" cy="6" r="6" fill="#4dd2ff"/><circle cx="35" cy="19" r="6" fill="#7dd13f"/>
+      <ellipse cx="0" cy="-16" rx="34" ry="9" fill="#ffffff" opacity=".3"/>
+    </g>
+    <rect width="180" height="180" rx="40" fill="url(#gloss)"/><rect width="180" height="180" rx="40" fill="url(#shade)"/>
+  </symbol>
+  <symbol id="app-messages" viewBox="0 0 180 180">
+    <rect width="180" height="180" rx="40" fill="url(#bg-messages)"/>
+    <g filter="url(#soft)">
+      <path d="M70 50 H132 a16 16 0 0 1 16 16 V92 a16 16 0 0 1 -16 16 H104 l-2 16 -16 -16 H70 a16 16 0 0 1 -16 -16 V66 a16 16 0 0 1 16 -16Z" fill="#bfe9ff"/>
+      <path d="M48 64 H120 a16 16 0 0 1 16 16 V108 a16 16 0 0 1 -16 16 H82 l-20 18 2 -18 H48 a16 16 0 0 1 -16 -16 V80 a16 16 0 0 1 16 -16Z" fill="url(#bubbleW)"/>
+    </g>
+    <g><circle cx="62" cy="94" r="7" fill="#36b3f0"/><circle cx="84" cy="94" r="7" fill="#7dd13f"/><circle cx="106" cy="94" r="7" fill="#ffb02e"/></g>
+    <rect width="180" height="180" rx="40" fill="url(#gloss)"/><rect width="180" height="180" rx="40" fill="url(#shade)"/>
+  </symbol>
+  <symbol id="app-camera" viewBox="0 0 180 180">
+    <rect width="180" height="180" rx="40" fill="url(#bg-camera)"/>
+    <g filter="url(#soft)" transform="translate(90,98)">
+      <path d="M-30 -34 l7 -12 h22 l7 12Z" fill="#3a4049"/>
+      <rect x="-58" y="-32" width="116" height="78" rx="16" fill="url(#camBody)"/>
+    </g>
+    <g transform="translate(90,98)">
+      <circle cx="0" cy="8" r="27" fill="#1b1f25"/>
+      <circle cx="0" cy="8" r="22" fill="url(#lens)"/>
+      <circle cx="0" cy="8" r="11" fill="#0a3050"/>
+      <path d="M-14 -4 a20 20 0 0 1 16 -6" fill="none" stroke="#dff2ff" stroke-width="4" stroke-linecap="round" opacity=".85"/>
+      <circle cx="-8" cy="1" r="4.5" fill="#eaf7ff" opacity=".9"/>
+      <circle cx="42" cy="-20" r="5" fill="#ffe066"/><circle cx="42" cy="-20" r="5" fill="#fff" opacity=".25"/>
+      <rect x="-52" y="-24" width="14" height="9" rx="3" fill="#aab6c2"/>
+    </g>
+    <rect width="180" height="180" rx="40" fill="url(#gloss)"/><rect width="180" height="180" rx="40" fill="url(#shade)"/>
+  </symbol>
+  <symbol id="app-tunes" viewBox="0 0 180 180">
+    <rect width="180" height="180" rx="40" fill="url(#bg-tunes)"/>
+    <g filter="url(#soft)" fill="url(#note)">
+      <rect x="78" y="52" width="7" height="62" rx="3"/><rect x="112" y="44" width="7" height="62" rx="3"/>
+      <path d="M78 52 L119 44 V60 L78 68 Z"/>
+      <ellipse cx="72" cy="116" rx="15" ry="12" transform="rotate(-18 72 116)"/>
+      <ellipse cx="106" cy="108" rx="15" ry="12" transform="rotate(-18 106 108)"/>
+    </g>
+    <g fill="#ffe066"><path d="M128 70 l3 7 7 3 -7 3 -3 7 -3 -7 -7 -3 7 -3Z"/><circle cx="56" cy="70" r="3.4"/></g>
+    <rect width="180" height="180" rx="40" fill="url(#gloss)"/><rect width="180" height="180" rx="40" fill="url(#shade)"/>
+  </symbol>
+  <symbol id="app-settings" viewBox="0 0 180 180">
+    <rect width="180" height="180" rx="40" fill="url(#bg-settings)"/>
+    <g filter="url(#soft)">
+      <g transform="translate(120,124) scale(.5)" fill="#9fb0bf" stroke="#7c8c9b" stroke-width="3" stroke-linejoin="round">
+        <path d="M0.0 -36.0 L8.0 -45.3 L15.7 -43.2 L18.0 -31.2 L23.1 -27.6 L35.2 -29.6 L39.8 -23.0 L33.8 -12.3 L35.5 -6.3 L46.0 0.0 L45.3 8.0 L33.8 12.3 L31.2 18.0 L35.2 29.6 L29.6 35.2 L18.0 31.2 L12.3 33.8 L8.0 45.3 L0.0 46.0 L-6.3 35.5 L-12.3 33.8 L-23.0 39.8 L-29.6 35.2 L-27.6 23.1 L-31.2 18.0 L-43.2 15.7 L-45.3 8.0 L-36.0 0.0 L-35.5 -6.3 L-43.2 -15.7 L-39.8 -23.0 L-27.6 -23.1 L-23.1 -27.6 L-23.0 -39.8 L-15.7 -43.2 L-6.3 -35.5 Z"/>
+        <circle cx="0" cy="0" r="13" fill="#7c8c9b"/>
+      </g>
+      <g transform="translate(82,86)" fill="url(#metal)" stroke="#6f7e8d" stroke-width="2.4" stroke-linejoin="round">
+        <path d="M0.0 -36.0 L8.0 -45.3 L15.7 -43.2 L18.0 -31.2 L23.1 -27.6 L35.2 -29.6 L39.8 -23.0 L33.8 -12.3 L35.5 -6.3 L46.0 0.0 L45.3 8.0 L33.8 12.3 L31.2 18.0 L35.2 29.6 L29.6 35.2 L18.0 31.2 L12.3 33.8 L8.0 45.3 L0.0 46.0 L-6.3 35.5 L-12.3 33.8 L-23.0 39.8 L-29.6 35.2 L-27.6 23.1 L-31.2 18.0 L-43.2 15.7 L-45.3 8.0 L-36.0 0.0 L-35.5 -6.3 L-43.2 -15.7 L-39.8 -23.0 L-27.6 -23.1 L-23.1 -27.6 L-23.0 -39.8 L-15.7 -43.2 L-6.3 -35.5 Z"/>
+        <circle cx="0" cy="0" r="16" fill="#7c8c9b"/><circle cx="0" cy="0" r="16" fill="none" stroke="#aebcc8" stroke-width="2"/>
+      </g>
+    </g>
+    <rect width="180" height="180" rx="40" fill="url(#gloss)"/><rect width="180" height="180" rx="40" fill="url(#shade)"/>
+  </symbol>
+
+  <!-- ===== Bubble Pop game art (svg-creator skill) ===== -->
+  <radialGradient id="bubB" cx="38%" cy="32%" r="72%"><stop offset="0%" stop-color="#ffffff" stop-opacity=".10"/><stop offset="55%" stop-color="#bfeaff" stop-opacity=".14"/><stop offset="85%" stop-color="#54c6f6" stop-opacity=".40"/><stop offset="100%" stop-color="#2aa3e6" stop-opacity=".60"/></radialGradient>
+  <radialGradient id="bubP" cx="38%" cy="32%" r="72%"><stop offset="0%" stop-color="#ffffff" stop-opacity=".12"/><stop offset="55%" stop-color="#ffd6ea" stop-opacity=".16"/><stop offset="85%" stop-color="#ff86c2" stop-opacity=".42"/><stop offset="100%" stop-color="#e857a6" stop-opacity=".62"/></radialGradient>
+  <radialGradient id="bubM" cx="38%" cy="32%" r="72%"><stop offset="0%" stop-color="#ffffff" stop-opacity=".12"/><stop offset="55%" stop-color="#d4ffe9" stop-opacity=".16"/><stop offset="85%" stop-color="#7bf0b6" stop-opacity=".40"/><stop offset="100%" stop-color="#28c87e" stop-opacity=".60"/></radialGradient>
+  <radialGradient id="gFrogG" cx="42%" cy="32%" r="78%"><stop offset="0%" stop-color="#b3f27e"/><stop offset="55%" stop-color="#74cb43"/><stop offset="100%" stop-color="#4a9622"/></radialGradient>
+  <radialGradient id="gBellyG" cx="50%" cy="38%" r="70%"><stop offset="0%" stop-color="#e0fcb0"/><stop offset="100%" stop-color="#a9e76e"/></radialGradient>
+  <radialGradient id="gPad" cx="42%" cy="34%" r="78%"><stop offset="0%" stop-color="#8fe05a"/><stop offset="60%" stop-color="#56bf38"/><stop offset="100%" stop-color="#2f8b22"/></radialGradient>
+
+  <symbol id="pop-bubble" viewBox="0 0 100 100">
+    <circle cx="50" cy="50" r="44" fill="url(#bubB)"/><circle cx="50" cy="50" r="44" fill="none" stroke="#eafcff" stroke-width="2.4" opacity=".85"/>
+    <ellipse cx="36" cy="31" rx="15" ry="10" fill="#ffffff" opacity=".8" transform="rotate(-26 36 31)"/><circle cx="65" cy="66" r="5.5" fill="#ffffff" opacity=".5"/>
+    <path d="M20 58 A40 40 0 0 1 30 28" fill="none" stroke="#ffffff" stroke-width="3" opacity=".3" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="pop-bubble-pink" viewBox="0 0 100 100">
+    <circle cx="50" cy="50" r="44" fill="url(#bubP)"/><circle cx="50" cy="50" r="44" fill="none" stroke="#ffeaf6" stroke-width="2.4" opacity=".85"/>
+    <ellipse cx="36" cy="31" rx="15" ry="10" fill="#ffffff" opacity=".8" transform="rotate(-26 36 31)"/><circle cx="65" cy="66" r="5.5" fill="#ffffff" opacity=".5"/>
+    <path d="M20 58 A40 40 0 0 1 30 28" fill="none" stroke="#ffffff" stroke-width="3" opacity=".3" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="pop-bubble-mint" viewBox="0 0 100 100">
+    <circle cx="50" cy="50" r="44" fill="url(#bubM)"/><circle cx="50" cy="50" r="44" fill="none" stroke="#eafff4" stroke-width="2.4" opacity=".85"/>
+    <ellipse cx="36" cy="31" rx="15" ry="10" fill="#ffffff" opacity=".8" transform="rotate(-26 36 31)"/><circle cx="65" cy="66" r="5.5" fill="#ffffff" opacity=".5"/>
+    <path d="M20 58 A40 40 0 0 1 30 28" fill="none" stroke="#ffffff" stroke-width="3" opacity=".3" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="pop-frog" viewBox="0 0 100 100">
+    <g filter="url(#soft)">
+      <ellipse cx="22" cy="82" rx="14" ry="8" fill="#4a9622"/><ellipse cx="78" cy="82" rx="14" ry="8" fill="#4a9622"/>
+      <path d="M50 24 C73 24 87 41 87 62 C87 83 70 93 50 93 C30 93 13 83 13 62 C13 41 27 24 50 24Z" fill="url(#gFrogG)" stroke="#3a8020" stroke-width="2.4"/>
+      <circle cx="33" cy="27" r="15" fill="url(#gFrogG)" stroke="#3a8020" stroke-width="2.4"/><circle cx="67" cy="27" r="15" fill="url(#gFrogG)" stroke="#3a8020" stroke-width="2.4"/>
+    </g>
+    <ellipse cx="50" cy="68" rx="23" ry="18" fill="url(#gBellyG)" opacity=".6"/>
+    <circle cx="33" cy="28" r="9.5" fill="#fff"/><circle cx="67" cy="28" r="9.5" fill="#fff"/>
+    <circle cx="35" cy="31" r="5" fill="#16242e"/><circle cx="65" cy="31" r="5" fill="#16242e"/>
+    <circle cx="37" cy="29" r="1.8" fill="#fff"/><circle cx="67" cy="29" r="1.8" fill="#fff"/>
+    <ellipse cx="44" cy="50" rx="1.6" ry="2" fill="#36702a"/><ellipse cx="56" cy="50" rx="1.6" ry="2" fill="#36702a"/>
+    <path d="M38 58 Q50 70 62 58" fill="none" stroke="#2f6e18" stroke-width="3" stroke-linecap="round"/>
+    <g fill="#ff9bb0" opacity=".55"><circle cx="30" cy="60" r="4"/><circle cx="70" cy="60" r="4"/></g>
+    <path d="M40 88 q-8 4 -14 1" fill="none" stroke="#3a8020" stroke-width="4" stroke-linecap="round"/><path d="M60 88 q8 4 14 1" fill="none" stroke="#3a8020" stroke-width="4" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="pop-lily" viewBox="0 0 100 100">
+    <g filter="url(#soft)"><path d="M50 50 L45 9 A42 42 0 1 0 62 11 Z" fill="url(#gPad)" stroke="#2f7d1e" stroke-width="2.4"/></g>
+    <g stroke="#2f7d1e" stroke-width="1.6" opacity=".45" stroke-linecap="round">
+      <line x1="50" y1="50" x2="16" y2="34"/><line x1="50" y1="50" x2="12" y2="60"/><line x1="50" y1="50" x2="30" y2="86"/><line x1="50" y1="50" x2="64" y2="88"/><line x1="50" y1="50" x2="88" y2="64"/><line x1="50" y1="50" x2="86" y2="32"/>
+    </g>
+    <ellipse cx="34" cy="32" rx="13" ry="8" fill="#ffffff" opacity=".18" transform="rotate(-20 34 32)"/>
+    <g transform="translate(60,40)">
+      <g fill="#ff7ab0" stroke="#e0468f" stroke-width="1"><ellipse cx="0" cy="-9" rx="5" ry="8"/><ellipse cx="8" cy="-2" rx="5" ry="8" transform="rotate(60 8 -2)"/><ellipse cx="5" cy="8" rx="5" ry="8" transform="rotate(120 5 8)"/><ellipse cx="-5" cy="8" rx="5" ry="8" transform="rotate(-120 -5 8)"/><ellipse cx="-8" cy="-2" rx="5" ry="8" transform="rotate(-60 -8 -2)"/></g>
+      <circle cx="0" cy="0" r="4.5" fill="#ffd23e" stroke="#e0a81c" stroke-width="1"/>
+    </g>
+  </symbol>
+  <symbol id="bg-r1" viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice">
+    <rect width="400" height="300" fill="#bdeaff"/><rect y="120" width="400" height="180" fill="#3fb0ec"/>
+    <circle cx="340" cy="56" r="34" fill="#ffe066"/><circle cx="340" cy="56" r="44" fill="#ffe066" opacity=".3"/>
+    <path d="M0 150 q100 -34 200 0 t200 0 V300 H0Z" fill="#2ea0e0"/><path d="M0 200 q120 -30 200 0 t200 0 V300 H0Z" fill="#1f8ace"/><path d="M0 250 q100 -24 200 0 t200 0 V300 H0Z" fill="#1577ba"/>
+  </symbol>
+  <symbol id="bg-r2" viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice">
+    <rect width="400" height="300" fill="#2ea0e0"/>
+    <path d="M0 90 q120 -30 200 0 t200 0 V300 H0Z" fill="#2492d3"/><path d="M0 170 q120 -30 200 0 t200 0 V300 H0Z" fill="#1c83c3"/><path d="M0 240 q120 -26 200 0 t200 0 V300 H0Z" fill="#1574b1"/>
+    <g opacity=".9"><ellipse cx="70" cy="210" rx="42" ry="20" fill="#3fa83a"/><path d="M70 210 L66 192 A22 22 0 1 0 82 196Z" fill="#56bf38"/></g>
+    <g opacity=".9"><ellipse cx="300" cy="130" rx="34" ry="16" fill="#3fa83a"/><path d="M300 130 L296 116 A18 18 0 1 0 312 120Z" fill="#56bf38"/></g>
+  </symbol>
+  <symbol id="bg-r3" viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice">
+    <rect width="400" height="300" fill="#0f5c9c"/>
+    <path d="M0 80 q120 -26 200 0 t200 0 V300 H0Z" fill="#0d5290"/><path d="M0 160 q120 -26 200 0 t200 0 V300 H0Z" fill="#0a487f"/><path d="M0 230 q120 -22 200 0 t200 0 V300 H0Z" fill="#073c6c"/>
+    <g fill="#bfe9ff" opacity=".5"><circle cx="60" cy="60" r="4"/><circle cx="120" cy="40" r="3"/><circle cx="330" cy="70" r="5"/><circle cx="280" cy="30" r="3"/></g>
+  </symbol>
+  <symbol id="bg-r4" viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice">
+    <linearGradient id="sunsetSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ffd56b"/><stop offset="40%" stop-color="#ff9e6b"/><stop offset="100%" stop-color="#e85f8a"/></linearGradient>
+    <rect width="400" height="170" fill="url(#sunsetSky)"/><circle cx="200" cy="150" r="48" fill="#ffec9e"/>
+    <rect y="160" width="400" height="140" fill="#7a4f9e"/><path d="M0 175 q120 -22 200 0 t200 0 V300 H0Z" fill="#6a4290"/><path d="M0 235 q120 -20 200 0 t200 0 V300 H0Z" fill="#553379"/>
+  </symbol>
+  <symbol id="bg-r5" viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice">
+    <rect width="400" height="300" fill="#12244e"/><circle cx="320" cy="60" r="28" fill="#fdf3c0"/><circle cx="330" cy="54" r="24" fill="#12244e"/>
+    <g fill="#ffffff"><circle cx="60" cy="50" r="2"/><circle cx="120" cy="80" r="1.6"/><circle cx="180" cy="40" r="2.2"/><circle cx="250" cy="100" r="1.6"/><circle cx="90" cy="120" r="1.8"/></g>
+    <g fill="#aef07a"><circle cx="100" cy="200" r="3"/><circle cx="260" cy="230" r="3"/><circle cx="320" cy="190" r="2.6"/></g>
+    <path d="M0 200 q120 -22 200 0 t200 0 V300 H0Z" fill="#0e1c3e"/><path d="M0 250 q120 -18 200 0 t200 0 V300 H0Z" fill="#0a152f"/>
+  </symbol>
+
+  <!-- ===== icon system: line glyphs, topics, toys, scenes, covers, Ribbit ===== -->
+  <linearGradient id="bg-ribbit" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#46d6a0"/><stop offset="48%" stop-color="#1fb37e"/><stop offset="100%" stop-color="#0c8f63"/></linearGradient>
+  <symbol id="gl-plus" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></g></symbol>
+  <symbol id="gl-pencil" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19l4-1L20 7l-3-3L6 15z"/><path d="M14 6l3 3"/></g></symbol>
+  <symbol id="gl-heart" viewBox="0 0 24 24"><path d="M12 20S4 15 4 9.5A3.5 3.5 0 0 1 12 7a3.5 3.5 0 0 1 8 2.5C20 15 12 20 12 20z" fill="currentColor"/></symbol>
+  <symbol id="gl-info" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/></g><circle cx="12" cy="7.6" r="1.2" fill="currentColor"/></symbol>
+  <symbol id="gl-reset" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v4h4"/></g></symbol>
+  <symbol id="gl-sun" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></g></symbol>
+  <symbol id="gl-vol" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 9a4 4 0 0 1 0 6"/></g></symbol>
+  <symbol id="gl-mute" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 9l5 6M21 9l-5 6"/></g></symbol>
+  <symbol id="gl-play" viewBox="0 0 24 24"><path d="M7 5v14l12-7z" fill="currentColor"/></symbol>
+  <symbol id="gl-pause" viewBox="0 0 24 24"><g fill="currentColor"><rect x="6" y="5" width="4.4" height="14" rx="1.4"/><rect x="13.6" y="5" width="4.4" height="14" rx="1.4"/></g></symbol>
+  <symbol id="gl-prev" viewBox="0 0 24 24"><g fill="currentColor"><rect x="5" y="5" width="3" height="14" rx="1"/><path d="M20 5v14l-11-7z"/></g></symbol>
+  <symbol id="gl-next" viewBox="0 0 24 24"><g fill="currentColor"><rect x="16" y="5" width="3" height="14" rx="1"/><path d="M4 5v14l11-7z"/></g></symbol>
+  <symbol id="gl-send" viewBox="0 0 24 24"><path d="M3 11l17-7-7 17-2.5-6.5z" fill="currentColor"/></symbol>
+  <symbol id="gl-search" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></g></symbol>
+  <symbol id="gl-puzzle" viewBox="0 0 24 24"><path d="M10 3a2 2 0 0 1 4 0c0 1 .6 1.5 1.5 1.5H19v3.5c0 .9.5 1.5 1.5 1.5a2 2 0 0 1 0 4c-1 0-1.5.6-1.5 1.5V20h-4.5c-.9 0-1.5-.5-1.5-1.5a2 2 0 0 0-4 0c0 1-.6 1.5-1.5 1.5H4v-4.5C4 14.6 3.5 14 2.6 14a2 2 0 0 1 0-4c1 0 1.4-.6 1.4-1.5V4.5h3.5C8.4 4.5 9 4 9 3z" fill="currentColor"/></symbol>
+  <symbol id="gl-star" viewBox="0 0 24 24"><path d="M12 3l2.7 5.8 6.3.8-4.7 4.3 1.3 6.3L12 17.8 6.1 20.2l1.3-6.3L2.7 9.6l6.3-.8z" fill="currentColor"/></symbol>
+  <symbol id="gl-trophy" viewBox="0 0 24 24"><g fill="currentColor"><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M5 5h2v2a2 2 0 0 1-2-2zM17 5h2a2 2 0 0 1-2 2z"/><rect x="10.5" y="13" width="3" height="4"/><rect x="7" y="17" width="10" height="3" rx="1"/></g></symbol>
+  <symbol id="gl-leaf" viewBox="0 0 24 24"><path d="M5 19c0-9 7-14 14-14 0 9-5 14-14 14z" fill="currentColor"/></symbol>
+  <symbol id="gl-up" viewBox="0 0 24 24"><path d="M12 6l8 9h-5v4h-6v-4H4z" fill="currentColor"/></symbol>
+  <symbol id="gl-down" viewBox="0 0 24 24"><path d="M12 18l-8-9h5V5h6v4h5z" fill="currentColor"/></symbol>
+  <symbol id="gl-comment" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 5h16v11H9l-4 3 .5-3H4z"/></g></symbol>
+  <symbol id="gl-fire" viewBox="0 0 24 24"><path d="M12 3c1 4-3 5-3 9a3 3 0 0 0 6 0c0-1.5-.7-2.3-.7-2.3.5.5 2.7 2 2.7 5a5 5 0 0 1-10 0c0-5 5-7 5-11.7z" fill="currentColor"/></symbol>
+  <symbol id="tp-earth" viewBox="0 0 32 32"><circle cx="16" cy="16" r="13" fill="#3aa0e0"/><path d="M7 12c3 1 5-1 8 0s4 3 7 2c-1 4-3 5-6 5-2 0-3-2-6-2s-4 1-5-1zM10 22c2-1 4 0 6 1" fill="#4cc06a"/><circle cx="16" cy="16" r="13" fill="none" stroke="#1f7fb8" stroke-width="1.5"/></symbol>
+  <symbol id="tp-cookie" viewBox="0 0 32 32"><circle cx="16" cy="16" r="13" fill="#d6a259"/><g fill="#6b3f17"><circle cx="12" cy="12" r="2"/><circle cx="20" cy="13" r="1.8"/><circle cx="14" cy="20" r="1.8"/><circle cx="21" cy="20" r="1.6"/><circle cx="16" cy="16" r="1.4"/></g></symbol>
+  <symbol id="tp-paw" viewBox="0 0 32 32"><g fill="#6a4a8c"><ellipse cx="16" cy="20" rx="7" ry="6"/><circle cx="9" cy="13" r="3"/><circle cx="16" cy="10" r="3.2"/><circle cx="23" cy="13" r="3"/></g></symbol>
+  <symbol id="tp-heart" viewBox="0 0 32 32"><path d="M16 27S4 19 4 12a6 6 0 0 1 12-2 6 6 0 0 1 12 2c0 7-12 15-12 15z" fill="#ff6f87"/></symbol>
+  <symbol id="tp-flower" viewBox="0 0 32 32"><g fill="#ff7ab0"><circle cx="16" cy="8" r="5"/><circle cx="24" cy="14" r="5"/><circle cx="21" cy="23" r="5"/><circle cx="11" cy="23" r="5"/><circle cx="8" cy="14" r="5"/></g><circle cx="16" cy="16" r="4.5" fill="#ffd23e"/></symbol>
+  <symbol id="tp-star" viewBox="0 0 32 32"><path d="M16 3l3.6 7.7 8.4 1-6.2 5.8 1.7 8.4L16 23.6 8.5 26.9l1.7-8.4L4 12.7l8.4-1z" fill="#ffce3a"/></symbol>
+  <symbol id="tp-spark" viewBox="0 0 32 32"><path d="M16 4l2.5 9.5L28 16l-9.5 2.5L16 28l-2.5-9.5L4 16l9.5-2.5z" fill="#ffd23e"/></symbol>
+  <symbol id="toy-woody" viewBox="0 0 48 48"><ellipse cx="24" cy="32" rx="22" ry="5" fill="#a9712f"/><path d="M11 31c2-12 24-12 26 0z" fill="#c98a3a"/><path d="M11 31c2-12 24-12 26 0" fill="none" stroke="#8a5a22" stroke-width="2"/></symbol>
+  <symbol id="toy-buzz" viewBox="0 0 48 48"><path d="M24 4c5 5 7 13 7 22 0 4-3 7-7 7s-7-3-7-7c0-9 2-17 7-22z" fill="#e8eef2"/><rect x="20" y="20" width="8" height="8" rx="2" fill="#7dd13f"/><circle cx="24" cy="13" r="3" fill="#9b6bff"/><path d="M17 30l-7 8M31 30l7 8" stroke="#c0392b" stroke-width="4" stroke-linecap="round"/><path d="M24 33l-4 11h8z" fill="#ffb02e"/></symbol>
+  <symbol id="toy-bullseye" viewBox="0 0 48 48"><path d="M16 10c-2-4 2-6 5-4l3 3 3-3c3-2 7 0 5 4-1 3-2 6-2 9 0 7-5 12-9 12s-9-5-9-12c0-3-1-6 4-9z" fill="#c98a3a"/><g fill="#5b3210"><circle cx="19" cy="22" r="2"/><circle cx="29" cy="22" r="2"/></g><ellipse cx="24" cy="30" rx="4" ry="3" fill="#8a5a22"/></symbol>
+  <symbol id="toy-rex" viewBox="0 0 48 48"><path d="M10 36c0-14 8-22 18-22 4 0 8 2 8 6 0 3-3 4-6 4 4 2 6 5 6 9 0 2-2 3-4 3z" fill="#6cbf38"/><circle cx="28" cy="22" r="2.2" fill="#16242e"/><path d="M30 16l4-3M33 19l5-2" stroke="#4d9a25" stroke-width="2" stroke-linecap="round"/><g fill="#fff"><path d="M14 34l2 3 2-3zM19 35l2 3 2-3z"/></g></symbol>
+  <symbol id="toy-jessie" viewBox="0 0 48 48"><path d="M8 30c3-3 8-4 8-4-2-3-1-6 2-6 2 0 3 2 3 4 3-1 8 0 8 0-1-3 0-6 3-6 2 0 3 2 2 5 0 0 4 3 4 7z" fill="#d83a3a"/><path d="M30 22c4 2 8 7 8 14-4-1-7-4-8-8z" fill="#c98a3a"/></symbol>
+  <symbol id="toy-potato" viewBox="0 0 48 48"><ellipse cx="24" cy="26" rx="16" ry="18" fill="#b9762f"/><g fill="#fff"><circle cx="18" cy="20" r="4"/><circle cx="30" cy="20" r="4"/></g><g fill="#16242e"><circle cx="18" cy="20" r="2"/><circle cx="30" cy="20" r="2"/></g><path d="M18 32q6 5 12 0" fill="none" stroke="#6b3f17" stroke-width="2.4" stroke-linecap="round"/><path d="M22 12l-3-5M26 12l3-5" stroke="#6b3f17" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="toy-frog" viewBox="0 0 48 48"><g filter="url(#soft)"><circle cx="15" cy="15" r="8" fill="url(#gFrog)"/><circle cx="33" cy="15" r="8" fill="url(#gFrog)"/><path d="M8 27C8 16 15 12 24 12s16 4 16 15-7 17-16 17S8 38 8 27z" fill="url(#gFrog)"/></g><circle cx="15" cy="15" r="5" fill="#fff"/><circle cx="33" cy="15" r="5" fill="#fff"/><circle cx="16" cy="16" r="2.4" fill="#16242e"/><circle cx="34" cy="16" r="2.4" fill="#16242e"/><path d="M17 30q7 7 14 0" fill="none" stroke="#2f6e18" stroke-width="2.6" stroke-linecap="round"/></symbol>
+  <symbol id="cam-pond" viewBox="0 0 120 90" preserveAspectRatio="xMidYMid slice"><rect width="120" height="90" fill="#bdeaff"/><circle cx="100" cy="20" r="11" fill="#ffe066"/><rect y="46" width="120" height="44" fill="#3fb0ec"/><path d="M0 54q30 -8 60 0t60 0V90H0z" fill="#1f8ace"/><ellipse cx="40" cy="66" rx="16" ry="7" fill="#56bf38"/><path d="M40 66l-2-7a9 9 0 1 0 7 2z" fill="#4aa830"/></symbol>
+  <symbol id="cam-frog" viewBox="0 0 120 90" preserveAspectRatio="xMidYMid slice"><rect width="120" height="90" fill="#7ec24a"/><g transform="translate(60,52) scale(1.25)"><circle cx="-15" cy="-12" r="11" fill="url(#gFrog)"/><circle cx="15" cy="-12" r="11" fill="url(#gFrog)"/><path d="M-22 4C-22 -10 -12 -16 0 -16s22 6 22 20-10 22-22 22S-22 18 -22 4z" fill="url(#gFrog)"/><circle cx="-15" cy="-12" r="7" fill="#fff"/><circle cx="15" cy="-12" r="7" fill="#fff"/><circle cx="-13" cy="-10" r="3.4" fill="#16242e"/><circle cx="17" cy="-10" r="3.4" fill="#16242e"/><path d="M-10 12q10 9 20 0" fill="none" stroke="#2f6e18" stroke-width="3" stroke-linecap="round"/></g></symbol>
+  <symbol id="cam-room" viewBox="0 0 120 90" preserveAspectRatio="xMidYMid slice"><rect width="120" height="90" fill="#efd9c0"/><rect y="64" width="120" height="26" fill="#caa57e"/><rect x="74" y="20" width="34" height="30" rx="2" fill="#bfe9ff" stroke="#fff" stroke-width="3"/><path d="M74 35h34M91 20v30" stroke="#fff" stroke-width="3"/><rect x="10" y="50" width="56" height="22" rx="4" fill="#f0a5b8"/><rect x="6" y="44" width="18" height="14" rx="3" fill="#fff"/></symbol>
+  <symbol id="cam-sunset" viewBox="0 0 120 90" preserveAspectRatio="xMidYMid slice"><linearGradient id="csky" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ffd56b"/><stop offset="100%" stop-color="#e8607f"/></linearGradient><rect width="120" height="60" fill="url(#csky)"/><circle cx="60" cy="50" r="20" fill="#ffec9e"/><rect y="56" width="120" height="34" fill="#6a4290"/><path d="M64 56c-6-6-4-14 2-18 2 6 8 8 8 14z" fill="#3a2356"/><path d="M52 56c2-8 10-8 12-2" fill="#3a2356"/></symbol>
+  <symbol id="cov-1" viewBox="0 0 100 100"><rect width="100" height="100" rx="14" fill="#7a2fb0"/><circle cx="50" cy="50" r="34" fill="#2a1240"/><circle cx="50" cy="50" r="33" fill="none" stroke="#9b6bff" stroke-width="1" opacity=".5"/><g transform="translate(50,50) scale(.62)"><circle cx="-15" cy="-12" r="11" fill="url(#gFrog)"/><circle cx="15" cy="-12" r="11" fill="url(#gFrog)"/><path d="M-22 4C-22 -10 -12 -16 0 -16s22 6 22 20-10 22-22 22S-22 18 -22 4z" fill="url(#gFrog)"/><circle cx="-15" cy="-12" r="6" fill="#fff"/><circle cx="15" cy="-12" r="6" fill="#fff"/><circle cx="-14" cy="-10" r="3" fill="#16242e"/><circle cx="16" cy="-10" r="3" fill="#16242e"/></g><circle cx="50" cy="50" r="5" fill="#1a0c2a"/></symbol>
+  <symbol id="cov-2" viewBox="0 0 100 100"><linearGradient id="c2g" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1a3a6e"/><stop offset="100%" stop-color="#0c2148"/></linearGradient><rect width="100" height="100" rx="14" fill="url(#c2g)"/><circle cx="66" cy="34" r="18" fill="#fdf3c0"/><circle cx="73" cy="30" r="15" fill="#16315e"/><g fill="#fff"><circle cx="24" cy="24" r="1.6"/><circle cx="40" cy="44" r="1.4"/><circle cx="20" cy="50" r="1.2"/></g><ellipse cx="50" cy="80" rx="30" ry="12" fill="#3fa83a"/><path d="M50 80l-4-12a14 14 0 1 0 10 3z" fill="#56bf38"/></symbol>
+  <symbol id="cov-3" viewBox="0 0 100 100"><linearGradient id="c3g" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#36b3f0"/><stop offset="100%" stop-color="#0f5fa0"/></linearGradient><rect width="100" height="100" rx="14" fill="url(#c3g)"/><path d="M50 30c10 14 18 20 18 30a18 18 0 0 1-36 0c0-10 8-16 18-30z" fill="#bfe9ff"/><g fill="#fff" opacity=".85"><circle cx="28" cy="34" r="6"/><circle cx="74" cy="40" r="8"/><circle cx="68" cy="24" r="4"/></g></symbol>
+  <symbol id="app-ribbit" viewBox="0 0 180 180">
+    <rect width="180" height="180" rx="40" fill="url(#bg-ribbit)"/>
+    <g filter="url(#soft)">
+      <path d="M40 56 H140 a16 16 0 0 1 16 16 V116 a16 16 0 0 1 -16 16 H84 l-22 20 3 -20 H40 a16 16 0 0 1 -16 -16 V72 a16 16 0 0 1 16 -16Z" fill="#ffffff"/>
+    </g>
+    <g transform="translate(90,96)">
+      <circle cx="-17" cy="-10" r="12" fill="url(#gFrog)"/><circle cx="17" cy="-10" r="12" fill="url(#gFrog)"/>
+      <path d="M-26 6C-26 -10 -14 -17 0 -17S26 -10 26 6 14 30 0 30 -26 22 -26 6Z" fill="url(#gFrog)"/>
+      <circle cx="-17" cy="-9" r="7" fill="#fff"/><circle cx="17" cy="-9" r="7" fill="#fff"/>
+      <circle cx="-15" cy="-7" r="3.4" fill="#16242e"/><circle cx="19" cy="-7" r="3.4" fill="#16242e"/>
+      <path d="M-11 12q11 9 22 0" fill="none" stroke="#2f6e18" stroke-width="3" stroke-linecap="round"/>
+    </g>
+    <g transform="translate(132,52)"><circle r="20" fill="#ff7a3d"/><path d="M0 -11l11 12h-6v8h-10v-8h-6z" fill="#fff"/></g>
+    <rect width="180" height="180" rx="40" fill="url(#gloss)"/><rect width="180" height="180" rx="40" fill="url(#shade)"/>
+  </symbol>
+  <!-- HOPTOPIA — blocky voxel frog tile -->
+  <linearGradient id="bg-hoptopia" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#8fe05a"/><stop offset="50%" stop-color="#3fbf6e"/><stop offset="100%" stop-color="#1a9a8a"/></linearGradient>
+  <symbol id="app-hoptopia" viewBox="0 0 180 180">
+    <rect width="180" height="180" rx="40" fill="url(#bg-hoptopia)"/>
+    <g shape-rendering="crispEdges">
+      <rect x="20" y="132" width="140" height="14" fill="#6b4a2a"/>
+      <rect x="20" y="124" width="140" height="8" fill="#5fc243"/>
+      <rect x="28" y="124" width="8" height="8" fill="#8fe05a"/><rect x="60" y="124" width="8" height="8" fill="#4aa832"/>
+      <rect x="100" y="124" width="8" height="8" fill="#8fe05a"/><rect x="140" y="124" width="8" height="8" fill="#4aa832"/>
+      <rect x="42" y="108" width="16" height="16" fill="#3f8a23"/><rect x="122" y="108" width="16" height="16" fill="#3f8a23"/>
+      <rect x="50" y="56" width="80" height="60" fill="#74cb43"/>
+      <rect x="50" y="56" width="80" height="10" fill="#8fdf5a"/>
+      <rect x="66" y="88" width="48" height="28" fill="#d7f7a8"/>
+      <rect x="54" y="36" width="20" height="20" fill="#74cb43"/><rect x="106" y="36" width="20" height="20" fill="#74cb43"/>
+      <rect x="58" y="40" width="12" height="12" fill="#ffffff"/><rect x="110" y="40" width="12" height="12" fill="#ffffff"/>
+      <rect x="62" y="44" width="6" height="6" fill="#16242e"/><rect x="112" y="44" width="6" height="6" fill="#16242e"/>
+      <rect x="74" y="76" width="32" height="6" fill="#2f6e18"/>
+      <rect x="68" y="76" width="6" height="6" fill="#2f6e18"/><rect x="106" y="76" width="6" height="6" fill="#2f6e18"/>
+    </g>
+    <rect width="180" height="180" rx="40" fill="url(#gloss)"/><rect width="180" height="180" rx="40" fill="url(#shade)"/>
+  </symbol>
+</defs>
+</svg>
+
+<div id="stage">
+  <div id="device">
+    <!-- ====== SCREEN (the OS fills the whole display) ====== -->
+    <div id="screen">
+      <div class="pond-decor" id="decor"></div>
+
+      <div id="statusbar">
+        <span id="clock">9:41</span>
+        <div class="navgroup">
+          <button class="sbtn" id="btn-home" title="Pond Home" aria-label="Home">
+            <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v4h4"/></svg>
+          </button>
+          <button class="sbtn" id="btn-vol" title="Volume" aria-label="Volume">
+            <svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 9a4 4 0 0 1 0 6"/></svg>
+          </button>
+          <button class="sbtn" id="btn-set" title="Settings" aria-label="Settings">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>
+          </button>
+        </div>
+        <span class="battery"><i></i></span>
+      </div>
+
+      <div id="view"></div>
+      <div class="toast" id="toast"></div>
+    </div>
+  </div>
+</div>
+<div class="flash" id="flash"></div>
+<div class="hint" id="hint">Lilypad OS · add to Home Screen on iPad and use <b>landscape</b> for the full toy experience</div>
+
+<script>
+/* =====================================================================
+   LILYPAD OS  — application logic
+   ===================================================================== */
+const $ = (s,r=document)=>r.querySelector(s);
+const el = (tag,cls,html)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(html!=null)e.innerHTML=html;return e;};
+const SVG=(sym,cls)=>`<svg class="${cls||'gi'}" aria-hidden="true"><use href="#${sym}"/></svg>`;
+const view = $('#view');
+const toastEl = $('#toast');
+let soundOn = true;
+
+/* ---- Keep the OS "sticky": stop iOS Safari rubber-banding & toolbar reveal ----
+   Allow a touch-drag to scroll ONLY when it's inside a .view that actually
+   overflows; otherwise swallow it so the page itself never moves. */
+document.addEventListener('touchmove', function(e){
+  if(e.touches && e.touches.length>1){ e.preventDefault(); return; } // no pinch
+  let n=e.target;
+  while(n && n!==document.body){
+    if(n.classList && n.classList.contains('view') && n.scrollHeight>n.clientHeight+1) return;
+    n=n.parentNode;
+  }
+  e.preventDefault();
+},{passive:false});
+document.addEventListener('gesturestart', e=>e.preventDefault()); // block double-tap zoom
+
+/* ---- persisted state ---- */
+const DEFAULT_STATE = {
+  friends:{ Heidi:false, Chelsea:false, Kara:false, BonnieBoo:true },
+  posts:[
+    {ic:"tp-earth",  title:"Save the Earth!", new:false},
+    {ic:"tp-cookie", title:"Cookie Sale $$$", new:false},
+    {ic:"tp-paw",    title:"Found a paw print", new:false},
+    {ic:"tp-heart",  title:"Bonnie's dance class", new:true},
+    {ic:"tp-flower", title:"Spring on the Pond", new:false},
+    {ic:"tp-star",   title:"Star jumper!", new:true},
+  ],
+  msgs:[
+    {from:"them",who:"BonnieBoo",text:"Hi! Be my friend on the Pond?"},
+    {from:"me",text:"Of course! Adding you now."},
+    {from:"them",who:"BonnieBoo",text:"Yay! Chelsea, Kara and Heidi are all here too!"},
+  ],
+  ribbit:[
+    {id:6, comm:"PondLife",      author:"BonnieBoo", av:"frog",   title:"I caught the BIGGEST bubble ever today!", votes:142, comments:23, v:0},
+    {id:5, comm:"FrogFacts",     author:"HopMaster", av:"kara",   title:"Did you know? Frogs can breathe through their skin!", votes:308, comments:54, v:0},
+    {id:4, comm:"BugClub",       author:"Heidi",     av:"lady",   title:"Found a shiny rainbow beetle by the reeds", votes:88, comments:12, v:0},
+    {id:3, comm:"Tadpoles",      author:"Kara",      av:"kara",   title:"My tadpole grew its very first leg!!", votes:201, comments:31, v:0},
+    {id:2, comm:"LilyPads",      author:"Chelsea",   av:"beaver", title:"Best lily pad for napping? Need recommendations", votes:67, comments:45, v:0},
+    {id:1, comm:"CritterCorner", author:"Splashy",   av:"beaver", title:"Show me your best cannonball splash!", votes:120, comments:18, v:0},
+  ],
+  volume:70, brightness:90, sfx:true, frogVoice:true
+};
+const RIBBIT_COMMS={
+  PondLife:{ic:"frog"}, FrogFacts:{ic:"tp-star"}, BugClub:{ic:"lady"},
+  Tadpoles:{ic:"kara"}, LilyPads:{ic:"pop-lily"}, CritterCorner:{ic:"beaver"},
+};
+let S = load();
+function load(){ try{return Object.assign(JSON.parse(JSON.stringify(DEFAULT_STATE)), JSON.parse(localStorage.getItem('lilypad')||'{}'));}catch(e){return JSON.parse(JSON.stringify(DEFAULT_STATE));} }
+function save(){ localStorage.setItem('lilypad', JSON.stringify(S)); }
+
+/* ---- friend avatars (the little Pond critters) ---- */
+const CRITTER = {
+  Heidi:   {sym:"lady",   bg:"#7a3fc0"},
+  Chelsea: {sym:"beaver", bg:"#c98a3a"},
+  Kara:    {sym:"kara",   bg:"#8b46d6"},
+  BonnieBoo:{sym:"frog",  bg:"#4f9e26"},
+};
+const critSvg=(sym)=>`<svg viewBox="0 0 100 100" aria-hidden="true"><use href="#${sym}"/></svg>`;
+
+/* ---- tiny sound engine (Web Audio beeps) ---- */
+let actx;
+function blip(freq=520,dur=.08,type="sine",vol=.2){
+  if(!soundOn) return;
+  try{ actx = actx||new (window.AudioContext||window.webkitAudioContext)();
+    const o=actx.createOscillator(),g=actx.createGain();
+    o.type=type;o.frequency.value=freq;g.gain.value=vol*(S.volume/100);
+    o.connect(g);g.connect(actx.destination);o.start();
+    g.gain.exponentialRampToValueAtTime(.0001,actx.currentTime+dur);
+    o.stop(actx.currentTime+dur);
+  }catch(e){}
+}
+const sfxTap=()=>blip(620,.06,"triangle",.18);
+const sfxGood=()=>{blip(660,.09,"sine",.2);setTimeout(()=>blip(880,.12,"sine",.2),90);};
+const sfxBad=()=>blip(160,.18,"sawtooth",.15);
+
+/* ---- Tunes: tiny Web Audio melody player (real, looping music) ---- */
+function ensureCtx(){ try{ actx=actx||new (window.AudioContext||window.webkitAudioContext)(); if(actx.state==='suspended')actx.resume(); }catch(e){} }
+function noteFreq(n){ if(!n) return 0; const map={C:-9,D:-7,E:-5,F:-4,G:-2,A:0,B:2}; const m=/^([A-G])(#?)(\d)$/.exec(n); if(!m)return 0; const s=map[m[1]]+(m[2]?1:0)+(+m[3]-4)*12; return 440*Math.pow(2,s/12); }
+const TUNES_MELODY={
+  'cov-1':{step:0.19,wave:'square',  notes:['C4','E4','G4','C5','G4','E4','A4','C5','F4','A4','C5','A4','G4','E4','C4',null]},
+  'cov-2':{step:0.42,wave:'sine',    notes:['E4','G4','C5','B4','A4','G4','E4',null,'D4','E4','G4',null,'C4',null,null,null]},
+  'cov-3':{step:0.16,wave:'triangle',notes:['G4','G4','C5','C5','E5','C5','G4',null,'A4','A4','D5','D5','F5','D5','A4',null]},
+};
+let tuneTimer=null;
+function stopTune(){ if(tuneTimer){clearInterval(tuneTimer);tuneTimer=null;} }
+function startTune(cov){
+  stopTune(); ensureCtx(); if(!actx) return;
+  const mel=TUNES_MELODY[cov]||TUNES_MELODY['cov-1']; let idx=0;
+  const tap=()=>{
+    if(!soundOn) return;
+    const n=mel.notes[idx%mel.notes.length]; idx++;
+    const f=noteFreq(n); if(!f) return;
+    const t=actx.currentTime, o=actx.createOscillator(), g=actx.createGain();
+    o.type=mel.wave; o.frequency.value=f;
+    const vol=0.14*(S.volume/100);
+    g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(vol,t+0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+mel.step*0.9);
+    o.connect(g);g.connect(actx.destination);o.start(t);o.stop(t+mel.step);
+  };
+  tap();
+  tuneTimer=setInterval(tap, mel.step*1000);
+}
+
+function toast(msg){toastEl.textContent=msg;toastEl.classList.add('show');clearTimeout(toast._t);toast._t=setTimeout(()=>toastEl.classList.remove('show'),1600);}
+
+/* ---- clock ---- */
+function tick(){const d=new Date();let h=d.getHours()%12||12;$('#clock').textContent=h+":"+String(d.getMinutes()).padStart(2,'0');}
+setInterval(tick,1000);tick();
+
+/* ---- pond decor (bubbles + lily pads) ---- */
+(function decor(){
+  const d=$('#decor');
+  for(let i=0;i<12;i++){const b=el('div','bubble');const s=4+Math.random()*16;
+    b.style.width=b.style.height=s+'px';b.style.left=Math.random()*100+'%';
+    b.style.animationDuration=(5+Math.random()*7)+'s';b.style.animationDelay=(-Math.random()*8)+'s';d.appendChild(b);}
+})();
+
+/* =====================================================================
+   ROUTER
+   ===================================================================== */
+const APPS = {
+  home:renderHome, pond:renderPond, posts:renderPosts, ribbit:renderRibbit, doodle:renderDoodle,
+  games:renderGames, messages:renderMessages, camera:renderCamera, tunes:renderTunes, settings:renderSettings
+};
+let current='home';
+function go(name,arg){
+  current=name; sfxTap(); stopTune();
+  view.innerHTML='';
+  const v=el('div','view'); v.id='view-'+name; view.appendChild(v);
+  (APPS[name]||renderHome)(v,arg);
+}
+$('#btn-home').onclick=()=>go('home');
+$('#btn-set').onclick=()=>go('settings');
+$('#btn-vol').onclick=()=>{ soundOn=!soundOn; toast(soundOn?'Sound on':'Sound off'); if(soundOn)sfxTap(); };
+
+/* =====================================================================
+   HOME  — "The Pond" launcher
+   ===================================================================== */
+const HOME_APPS=[
+  {id:'pond',    label:'The Pond', badge:()=>countRequests()},
+  {id:'posts',   label:'Posts',    badge:()=>S.posts.filter(p=>p.new).length},
+  {id:'ribbit',  label:'Ribbit'},
+  {id:'doodle',  label:'Doodle'},
+  {id:'games',   label:'Games'},
+  {id:'hoptopia',label:'HOPTOPIA', href:'hoptopia.html'},
+  {id:'messages',label:'Messages', badge:()=>1},
+  {id:'camera',  label:'Camera'},
+  {id:'tunes',   label:'Tunes'},
+  {id:'settings',label:'Settings'},
+];
+function countRequests(){return Object.values(S.friends).filter(v=>!v).length;}
+
+function renderHome(v){
+  const wrap=el('div','home-wrap');
+  const greet=el('div','home-greet');
+  greet.innerHTML=`<div class="av"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#frog"/></svg></div><div><h1>Hi, BonnieBoo!</h1><p>Welcome back to the Pond</p></div>`;
+  wrap.appendChild(greet);
+  const grid=el('div','grid');
+  HOME_APPS.forEach(a=>{
+    const b=el('button','app');
+    const n=a.badge?a.badge():0;
+    b.innerHTML=`<div class="ic"><svg class="ic-svg" viewBox="0 0 180 180" aria-hidden="true"><use href="#app-${a.id}"/></svg><span class="lily"></span>${n>0?`<span class="badge">${n}</span>`:''}</div><span>${a.label}</span>`;
+    b.onclick=()=>a.href?(location.href=a.href):go(a.id);
+    grid.appendChild(b);
+  });
+  wrap.appendChild(grid);
+  v.appendChild(wrap);
+}
+
+/* =====================================================================
+   THE POND  — friends / social  (the demonstrated app)
+   ===================================================================== */
+function renderPond(v){
+  const head=el('div','app-head');
+  head.innerHTML=`<span class="tab">${SVG('frog','tabtile')} Friends</span>`;
+  const add=el('button','pill-btn',`${SVG('gl-plus')} Be my friend on the Pond!`);
+  add.onclick=()=>addAllFriends(v);
+  head.appendChild(add);
+  v.appendChild(head);
+
+  const bonnie=el('div','bonnie-row');
+  bonnie.innerHTML=`<span class="namechip">@BonnieBoo</span><span class="speech">Oh, it was easy. I just sent a friend request!</span>`;
+  v.appendChild(bonnie);
+
+  // pending requests
+  const pending=Object.keys(S.friends).filter(f=>!S.friends[f] && f!=='BonnieBoo');
+  const panel=el('div','panel');
+  panel.innerHTML=`<span class="tab" style="background:#a23fbf">Friend Requests</span>`;
+  if(pending.length===0){
+    panel.appendChild(el('div',null,`<p style="color:#fff;font-weight:800;margin:.8em 0 0">You're friends with everyone on the Pond!</p>`));
+  }else{
+    pending.forEach(f=>{
+      const c=CRITTER[f];
+      const row=el('div','req-row');
+      row.innerHTML=`<div class="who"><span class="crit" style="background:${c.bg}">${critSvg(c.sym)}</span><span>${f} wants to be your friend</span></div>`;
+      const ok=el('button','pill-btn','Accept');
+      ok.style.marginLeft='auto';
+      ok.onclick=()=>{S.friends[f]=true;save();sfxGood();confetti();toast(f+' is now your friend!');go('pond');};
+      row.appendChild(ok);
+      panel.appendChild(row);
+    });
+  }
+  v.appendChild(panel);
+
+  // friend strip
+  const strip=el('div','friend-strip');
+  Object.keys(S.friends).forEach(f=>{
+    const c=CRITTER[f];const on=S.friends[f];
+    const fr=el('div','friend'+(on?' added':''));
+    fr.innerHTML=`<span class="crit" style="background:${c.bg};position:relative">${critSvg(c.sym)}${on?'<span style="position:absolute;right:-6%;bottom:-6%;background:#7dd13f;border-radius:50%;width:42%;height:42%;display:grid;place-items:center;border:2px solid #fff"><svg viewBox="0 0 24 24" style="width:64%;height:64%"><path d="M5 13l4 4 10-11" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>':''}</span><span class="name">${f}</span>`;
+    strip.appendChild(fr);
+  });
+  const wrap=el('div','panel');
+  wrap.style.background='linear-gradient(180deg,#8b46d6,#5a23a0)';
+  wrap.innerHTML=`<span class="tab">Pond Girls</span>`;
+  wrap.appendChild(strip);
+  v.appendChild(wrap);
+}
+function addAllFriends(v){
+  const pending=Object.keys(S.friends).filter(f=>!S.friends[f]);
+  if(pending.length===0){toast('Everyone is already your friend!');return;}
+  pending.forEach(f=>S.friends[f]=true);save();sfxGood();confetti();toast('Friend requests sent & accepted!');
+  go('pond');
+}
+function confetti(){
+  const colors=['#ffd23e','#ff6f61','#7dd13f','#4dd2ff','#cf3aa6','#9b6bff'];
+  for(let i=0;i<40;i++){
+    const c=el('div');const sz=6+Math.random()*8;
+    c.style.cssText=`position:absolute;z-index:40;width:${sz}px;height:${sz*.6}px;background:${colors[i%colors.length]};
+      left:${50+(Math.random()*40-20)}%;top:30%;border-radius:2px;pointer-events:none;
+      transform:rotate(${Math.random()*360}deg);`;
+    $('#screen').appendChild(c);
+    const dx=(Math.random()*2-1)*180, dy=120+Math.random()*220, rot=Math.random()*720;
+    c.animate([{transform:`translate(0,0) rotate(0)`,opacity:1},{transform:`translate(${dx}px,${dy}px) rotate(${rot}deg)`,opacity:0}],
+      {duration:1100+Math.random()*600,easing:'cubic-bezier(.2,.7,.3,1)'}).onfinish=()=>c.remove();
+  }
+}
+
+/* =====================================================================
+   POSTS  — bulletin board feed (demonstrated)
+   ===================================================================== */
+function renderPosts(v){
+  const head=el('div','app-head');
+  head.innerHTML=`<span class="tab" style="background:#ef7a2a">${SVG('app-posts','tabtile')} POST</span>`;
+  const add=el('button','pill-btn',`${SVG('gl-pencil')} New Post`);
+  add.onclick=()=>{
+    const e=prompt('What do you see on the Pond?');
+    if(e&&e.trim()){S.posts.unshift({ic:'tp-spark',title:e.trim().slice(0,40),new:true});save();sfxGood();go('posts');}
+  };
+  head.appendChild(add);
+  v.appendChild(head);
+  v.appendChild(el('div',null,`<p style="color:#eaf6ff;font-weight:800;margin:.2em 0 3%">Share what you see on the pond</p>`));
+  const board=el('div','board');
+  S.posts.forEach(p=>{
+    const n=el('div','note'+(p.new?' new':''));
+    n.innerHTML=`<span class="pin"></span>${SVG(p.ic||'tp-spark','noteic')}<span>${p.title}</span>`;
+    n.onclick=()=>{p.new=false;save();sfxTap();n.classList.remove('new');toast('Liked!');};
+    board.appendChild(n);
+  });
+  v.appendChild(board);
+}
+
+/* =====================================================================
+   RIBBIT  — kids' knock-off of Reddit (frog-themed forum)
+   ===================================================================== */
+function renderRibbit(v){
+  const head=el('div','app-head');
+  head.innerHTML=`<span class="tab" style="background:#0c8f63">${SVG('app-ribbit','tabtile')} Ribbit</span>`;
+  const post=el('button','pill-btn',`${SVG('gl-plus')} New ribbit`);
+  post.onclick=()=>toast('Posting opens soon on the Pond!');
+  head.appendChild(post); v.appendChild(head);
+
+  let sort='hot';
+  const sortbar=el('div','ribbit-sort');
+  [['hot','gl-fire','Hot'],['new','gl-star','New'],['top','gl-up','Top']].forEach(([k,ic,lbl])=>{
+    const b=el('button',k===sort?'on':'',`${SVG(ic)} ${lbl}`);
+    b.onclick=()=>{sort=k;[...sortbar.children].forEach(x=>x.classList.remove('on'));b.classList.add('on');draw();};
+    sortbar.appendChild(b);
+  });
+  v.appendChild(sortbar);
+  const list=el('div'); v.appendChild(list);
+
+  const score=p=>p.votes+(p.v||0);
+  function draw(){
+    list.innerHTML='';
+    const arr=[...S.ribbit];
+    if(sort==='top') arr.sort((a,b)=>score(b)-score(a));
+    else if(sort==='new') arr.sort((a,b)=>b.id-a.id);
+    else arr.sort((a,b)=>(score(b)+b.comments)-(score(a)+a.comments));
+    arr.forEach(p=>list.appendChild(row(p)));
+  }
+  function row(p){
+    const c=RIBBIT_COMMS[p.comm]||{ic:'frog'};
+    const r=el('div','rib');
+    r.innerHTML=`
+      <div class="rib-vote">
+        <button class="up${p.v===1?' on':''}">${SVG('gl-up')}</button>
+        <span class="count">${score(p)}</span>
+        <button class="down${p.v===-1?' on':''}">${SVG('gl-down')}</button>
+      </div>
+      <div class="rib-body">
+        <div class="rib-meta"><span class="rib-comm"><span class="cico">${SVG(c.ic,'gi')}</span>p/${p.comm}</span><span>• ${p.author}</span></div>
+        <div class="rib-title">${p.title}</div>
+        <div class="rib-foot"><span>${SVG('gl-comment')} ${p.comments}</span><span>${SVG('gl-heart')} Award</span></div>
+      </div>`;
+    const up=r.querySelector('.up'), down=r.querySelector('.down'), cnt=r.querySelector('.count');
+    up.onclick=()=>{p.v=p.v===1?0:1;save();cnt.textContent=score(p);up.classList.toggle('on',p.v===1);down.classList.remove('on');sfxTap();blip(720,.05,'triangle',.14);};
+    down.onclick=()=>{p.v=p.v===-1?0:-1;save();cnt.textContent=score(p);down.classList.toggle('on',p.v===-1);up.classList.remove('on');blip(240,.07,'sine',.12);};
+    return r;
+  }
+  draw();
+}
+
+/* =====================================================================
+   DOODLE  — drawing canvas (the art tile)
+   ===================================================================== */
+function renderDoodle(v){
+  const head=el('div','app-head');head.innerHTML=`<span class="tab" style="background:#d63b86">${SVG('app-doodle','tabtile')} Doodle</span>`;
+  const clr=el('button','pill-btn',`${SVG('gl-reset')} Clear`);
+  head.appendChild(clr);
+  v.appendChild(head);
+  const wrap=el('div',null);wrap.id='doodle-wrap';
+  const cv=el('canvas');cv.id='doodle-canvas';
+  const pal=el('div','palette');
+  wrap.appendChild(cv);wrap.appendChild(pal);v.appendChild(wrap);
+
+  const colors=['#16202a','#ff6f61','#ffd23e','#7dd13f','#4dd2ff','#cf3aa6','#9b6bff','#ffffff'];
+  let color=colors[0], size=6;
+  colors.forEach((c,i)=>{const s=el('div','swatch'+(i===0?' sel':''));s.style.background=c;
+    s.onclick=()=>{color=c;[...pal.children].forEach(x=>x.classList.remove('sel'));s.classList.add('sel');sfxTap();};pal.appendChild(s);});
+  [3,6,10].forEach((rr,i)=>{const b=el('button','swatch');b.style.cssText='background:#fff;display:grid;place-items:center;';
+    b.innerHTML=`<svg viewBox="0 0 24 24" style="width:72%;height:72%"><circle cx="12" cy="12" r="${rr}" fill="#16242e"/></svg>`;
+    b.onclick=()=>{size=[4,12,26][i];sfxTap();toast('Brush '+['thin','thick','huge'][i]);};pal.appendChild(b);});
+
+  const ctx=cv.getContext('2d');
+  function fit(){const r=cv.getBoundingClientRect();cv.width=r.width*devicePixelRatio;cv.height=r.height*devicePixelRatio;ctx.scale(devicePixelRatio,devicePixelRatio);ctx.lineCap='round';ctx.lineJoin='round';}
+  requestAnimationFrame(fit);
+  let drawing=false,last=null;
+  function pos(e){const r=cv.getBoundingClientRect();const t=e.touches?e.touches[0]:e;return{x:t.clientX-r.left,y:t.clientY-r.top};}
+  function start(e){drawing=true;last=pos(e);e.preventDefault();}
+  function move(e){if(!drawing)return;const p=pos(e);ctx.strokeStyle=color;ctx.lineWidth=size;ctx.beginPath();ctx.moveTo(last.x,last.y);ctx.lineTo(p.x,p.y);ctx.stroke();last=p;e.preventDefault();}
+  function end(){drawing=false;}
+  cv.addEventListener('pointerdown',start);cv.addEventListener('pointermove',move);
+  window.addEventListener('pointerup',end);
+  clr.onclick=()=>{ctx.clearRect(0,0,cv.width,cv.height);sfxTap();};
+}
+
+/* =====================================================================
+   GAMES  — menu + playable "Guess Who" + "Tadpole Pop"
+   ===================================================================== */
+function renderGames(v){
+  const head=el('div','app-head');head.innerHTML=`<span class="tab" style="background:#6a2fb0">${SVG('app-games','tabtile')} Games</span>`;
+  v.appendChild(head);
+  const grid=el('div','game-grid');
+  const games=[
+    {cls:'gc-1',big:'gl-search', name:'Guess Who?',fn:()=>gameGuess(v)},
+    {cls:'gc-2',big:'pop-bubble',name:'Bubble Pop',fn:()=>gamePop(v)},
+    {cls:'gc-3',big:'app-hoptopia',name:'HOPTOPIA',fn:()=>location.href='hoptopia.html'},
+    {cls:'gc-4',big:'gl-puzzle', name:'Pond Puzzle',fn:()=>toast('Pond Puzzle — coming soon!')},
+  ];
+  games.forEach(g=>{const c=el('button','game-card '+g.cls);c.innerHTML=`<span class="big">${SVG(g.big,'cardic')}</span><span>${g.name}</span>`;c.onclick=g.fn;grid.appendChild(c);});
+  v.appendChild(grid);
+}
+
+/* "ROUND 1-7 guess the toy" mini-game straight from the trailer */
+function gameGuess(v){
+  v.innerHTML='';
+  const TOYS=[
+    {sym:'toy-woody',name:'Woody',opts:['Woody','Buzz','Rex','Hamm']},
+    {sym:'toy-buzz',name:'Buzz',opts:['Jessie','Buzz','Slinky','Forky']},
+    {sym:'toy-bullseye',name:'Bullseye',opts:['Bullseye','Rex','Trixie','Buttercup']},
+    {sym:'toy-rex',name:'Rex',opts:['Hamm','Rex','Woody','Wheezy']},
+    {sym:'toy-jessie',name:'Jessie',opts:['Bo Peep','Jessie','Dolly','Gabby']},
+    {sym:'toy-potato',name:'Mr. Potato Head',opts:['Mr. Potato Head','Slinky','Buzz','Rex']},
+    {sym:'toy-frog',name:'Lilypad',opts:['Lilypad','Forky','Ducky','Bunny']},
+  ];
+  let round=0,score=0;
+  const wrap=el('div',null);wrap.id='guess';
+  v.appendChild(wrap);
+  function draw(){
+    const t=TOYS[round];
+    wrap.innerHTML='';
+    wrap.appendChild(el('div','round','ROUND '+(round+1)));
+    const box=el('div','pixel-box');
+    box.innerHTML=`<div class="meter"><i style="width:100%"></i></div>`;
+    const face=el('div');
+    face.innerHTML=SVG(t.sym,'gfsvg');
+    face.style.cssText='width:74%;height:74%;filter:blur(14px);transition:filter 2.4s linear;';
+    box.appendChild(face);
+    wrap.appendChild(box);
+    requestAnimationFrame(()=>{face.style.filter='blur(2px)';box.querySelector('.meter i').style.transition='width 2.4s linear';box.querySelector('.meter i').style.width='0%';});
+    const opts=el('div','guess-opts');
+    t.opts.forEach(o=>{const b=el('button',null,o);b.onclick=()=>{
+      if(o===t.name){b.classList.add('right');sfxGood();score++;face.style.filter='none';}
+      else{b.classList.add('wrong');sfxBad();[...opts.children].forEach(x=>{if(x.textContent===t.name)x.classList.add('right');});face.style.filter='none';}
+      [...opts.children].forEach(x=>x.disabled=true);
+      setTimeout(()=>{round++; round<TOYS.length?draw():finish();},1100);
+    };opts.appendChild(b);});
+    wrap.appendChild(opts);
+  }
+  function finish(){
+    wrap.innerHTML='';
+    const rd=el('div','round'); rd.innerHTML=`${SVG('gl-trophy','roundic')} ${score}/${TOYS.length}`; wrap.appendChild(rd);
+    wrap.appendChild(el('div',null,`<p style="color:#fff;font-weight:800;font-size:clamp(13px,3vmin,24px)">${score===TOYS.length?'Perfect round! You know every toy!':'Great guessing on the Pond!'}</p>`));
+    const again=el('button','pill-btn','▶ Play again');again.style.margin='2% auto';again.onclick=()=>{round=0;score=0;draw();};
+    const back=el('button','pill-btn','← Games');back.style.cssText='margin:2% auto;background:#9b6bff;box-shadow:0 4px 0 #6a2fb0;';back.onclick=()=>go('games');
+    wrap.appendChild(again);wrap.appendChild(back);
+  }
+  draw();
+}
+
+/* Bubble Pop — pop bubbles (+1), frogs are double (+2), avoid lily pads (-1).
+   Difficulty ramps each round; first two rounds are gentle for little kids. */
+const POP_ROUNDS=[
+  {bg:'bg-r1',name:'Warm Up',      dur:22, spawn:720,  life:3500, sizeF:0.30, lily:0.16, frog:0.28},
+  {bg:'bg-r2',name:'Lily Splash',  dur:24, spawn:1000, life:3000, sizeF:0.27, lily:0.16, frog:0.27},
+  {bg:'bg-r3',name:'Deep Dive',    dur:26, spawn:850,  life:2400, sizeF:0.23, lily:0.16, frog:0.24},
+  {bg:'bg-r4',name:'Sunset Pop',   dur:28, spawn:700,  life:2000, sizeF:0.20, lily:0.22, frog:0.22},
+  {bg:'bg-r5',name:'Night Frenzy', dur:30, spawn:560,  life:1700, sizeF:0.18, lily:0.26, frog:0.22},
+];
+const piece=(sym)=>`<svg viewBox="0 0 100 100" aria-hidden="true"><use href="#${sym}"/></svg>`;
+
+function gamePop(v){
+  v.innerHTML='';
+  const area=el('div'); area.id='pop-area'; v.appendChild(area);
+  let bgEl=null, roundIdx=0, total=0;
+
+  function setBg(sym){ if(!bgEl){bgEl=el('div','pop-bg'); area.appendChild(bgEl);} bgEl.innerHTML=`<svg viewBox="0 0 400 300" preserveAspectRatio="xMidYMid slice"><use href="#${sym}"/></svg>`; }
+  function overlay(html){ const o=el('div','pop-overlay'); o.innerHTML=html; area.appendChild(o); return o; }
+
+  function roundIntro(){
+    const r=POP_ROUNDS[roundIdx];
+    setBg(r.bg);
+    const o=overlay(`<div class="hud-chip chip-round">Round ${roundIdx+1} / ${POP_ROUNDS.length}</div>
+      <h2>${r.name}</h2>
+      <div class="tip-row"><b>${piece('pop-bubble')} +1</b><b>${piece('pop-frog')} +2</b><b>${piece('pop-lily')} −1</b></div>
+      <p>${roundIdx<2?'Take your time — tap the bubbles!':'Faster now — grab the frogs, dodge the lily pads!'}</p>`);
+    const btn=el('button','big-btn', roundIdx===0?'▶ Start':'▶ Go!');
+    btn.onclick=()=>{ o.remove(); playRound(); };
+    o.appendChild(btn);
+  }
+
+  function playRound(){
+    const r=POP_ROUNDS[roundIdx];
+    let time=r.dur, roundScore=0, live=true;
+    const hud=el('div','pop-hud');
+    const cRound=el('span','hud-chip chip-round',`${SVG('gl-star','chipic')} R${roundIdx+1}`);
+    const cScore=el('span','hud-chip chip-score',`${SVG('gl-star','chipic')} <span class="num">${total}</span>`);
+    const cTime=el('span','hud-chip chip-time',`⏱ ${time}`);
+    hud.append(cRound,cScore,cTime); area.appendChild(hud);
+    const bar=el('div','time-bar'); area.appendChild(bar);
+
+    function award(d,x,y){
+      total=Math.max(0,total+d); roundScore+=d;
+      cScore.querySelector('.num').textContent=total;
+      cScore.classList.remove('score-bump'); void cScore.offsetWidth; cScore.classList.add('score-bump');
+      const p=el('div','pop-pop'); p.textContent = d>=2?'+2 ×2!':(d>0?`+${d}`:`−1`);
+      p.style.left=x+'px'; p.style.top=y+'px';
+      p.style.color = d<0?'#ff6b6b':(d>=2?'#ffe066':'#9be86a');
+      p.style.fontSize = d>=2?'clamp(18px,5vmin,36px)':'clamp(14px,4vmin,26px)';
+      area.appendChild(p);
+      p.animate([{transform:'translate(-50%,-50%) scale(.5)',opacity:0},{transform:'translate(-50%,-90%) scale(1.1)',opacity:1,offset:.3},{transform:'translate(-50%,-180%) scale(1)',opacity:0}],{duration:850,easing:'ease-out'}).onfinish=()=>p.remove();
+    }
+    function spawn(){
+      if(!live)return;
+      const R=area.getBoundingClientRect(); const amin=Math.min(R.width,R.height);
+      const size=Math.max(36, amin*r.sizeF);
+      const rr=Math.random(); let type,sym;
+      if(rr<r.frog){type='frog';sym='pop-frog';}
+      else if(rr<r.frog+r.lily){type='lily';sym='pop-lily';}
+      else{type='bubble';sym=['pop-bubble','pop-bubble-pink','pop-bubble-mint'][Math.floor(Math.random()*3)];}
+      const it=el('button','pop-item'); it.innerHTML=piece(sym);
+      it.style.width=it.style.height=size+'px';
+      const x=6+Math.random()*Math.max(1,R.width-size-12);
+      const topMin=R.height*0.16, topMax=R.height-size-6;
+      const y=topMin+Math.random()*Math.max(1,topMax-topMin);
+      it.style.left=x+'px'; it.style.top=y+'px';
+      area.appendChild(it);
+      it.animate([{opacity:0,transform:'scale(.4)'},{opacity:1,transform:'scale(1)'}],{duration:260,easing:'ease-out'});
+      const bob=it.animate([{transform:'translateY(0)'},{transform:`translateY(-${6+Math.random()*8}px)`},{transform:'translateY(0)'}],{duration:1400+Math.random()*800,iterations:Infinity,easing:'ease-in-out'});
+      it._life=setTimeout(()=>{ it.animate([{opacity:1},{opacity:0,transform:'scale(.6)'}],{duration:340}).onfinish=()=>it.remove(); }, r.life);
+      it.addEventListener('pointerdown',(e)=>{
+        e.preventDefault(); if(!live)return;
+        clearTimeout(it._life); bob.cancel();
+        const br=it.getBoundingClientRect(), ar=area.getBoundingClientRect();
+        award(type==='frog'?2:(type==='lily'?-1:1), br.left-ar.left+size/2, br.top-ar.top+size/2);
+        it.style.pointerEvents='none';
+        it.animate([{transform:'scale(1)',opacity:1},{transform:'scale(1.5)',opacity:0}],{duration:170}).onfinish=()=>it.remove();
+        if(type==='lily') blip(150,.16,'sawtooth',.14); else blip(560+Math.random()*160,.05,'triangle',.16);
+      },{passive:false});
+      if(live) setTimeout(spawn, r.spawn*(0.7+Math.random()*0.6));
+    }
+    const timer=setInterval(()=>{
+      time--; cTime.textContent=`⏱ ${time}`; bar.style.width=Math.max(0,time/r.dur*100)+'%';
+      if(time<=0){ clearInterval(timer); live=false; setTimeout(()=>endRound(roundScore,hud,bar),250); }
+    },1000);
+    spawn();
+  }
+
+  function endRound(roundScore,hud,bar){
+    area.querySelectorAll('.pop-item,.pop-pop').forEach(i=>i.remove());
+    if(hud)hud.remove(); if(bar)bar.remove();
+    const last = roundIdx>=POP_ROUNDS.length-1;
+    sfxGood(); if(last) confetti();
+    const sign = roundScore>=0?`+${roundScore}`:`${roundScore}`;
+    const o=overlay(`<h2>${last?`${SVG('gl-trophy','h2ic')} Pond Champion!`:'Round Done!'}</h2>
+      <div class="hud-chip chip-score" style="font-size:clamp(18px,5vmin,34px)">${SVG('gl-star','chipic')} ${total} points</div>
+      <p>${last?'You finished every round on the Pond!':`${sign} points this round`}</p>`);
+    const btn=el('button','big-btn', last?'▶ Play again':'▶ Next round');
+    btn.onclick=()=>{ o.remove(); if(last){ total=0; roundIdx=0; } else { roundIdx++; } roundIntro(); };
+    o.appendChild(btn);
+  }
+
+  roundIntro();
+}
+
+/* =====================================================================
+   MESSAGES  — stub (mock conversation, but you can reply)
+   ===================================================================== */
+function renderMessages(v){
+  const head=el('div','app-head');head.innerHTML=`<span class="tab" style="background:#1f8fd0">${SVG('app-messages','tabtile')} Messages</span>`;
+  v.appendChild(head);
+  v.appendChild(el('div',null,`<div class="chat-from">${SVG('frog','gi')} BonnieBoo & the Pond Girls</div>`));
+  const chat=el('div','chat');
+  S.msgs.forEach(m=>{const b=el('div','msg '+(m.from));b.textContent=m.text;chat.appendChild(b);});
+  v.appendChild(chat);
+  const comp=el('div','composer');
+  const inp=el('input');inp.placeholder='Send a ribbit…';
+  const send=el('button',null,SVG('gl-send','sendic'));
+  function doSend(){const t=inp.value.trim();if(!t)return;S.msgs.push({from:'me',text:t});save();
+    const b=el('div','msg me');b.textContent=t;chat.appendChild(b);inp.value='';chat.scrollIntoView(false);sfxTap();
+    setTimeout(()=>{const r=['Ribbit ribbit!','So cool!','See you on the Pond!','Heehee!'][Math.floor(Math.random()*4)];
+      S.msgs.push({from:'them',who:'BonnieBoo',text:r});save();const rb=el('div','msg them');rb.textContent=r;chat.appendChild(rb);chat.scrollIntoView(false);blip(560,.07);},800);}
+  send.onclick=doSend;inp.addEventListener('keydown',e=>{if(e.key==='Enter')doSend();});
+  comp.appendChild(inp);comp.appendChild(send);v.appendChild(comp);
+}
+
+/* =====================================================================
+   CAMERA  — stub viewfinder + shutter
+   ===================================================================== */
+function renderCamera(v){
+  const head=el('div','app-head');head.innerHTML=`<span class="tab" style="background:#f0a91f">${SVG('app-camera','tabtile')} Camera</span>`;
+  v.appendChild(head);
+  const wrap=el('div',null);wrap.id='cam';
+  const scenes=['cam-pond','cam-frog','cam-room','cam-sunset'];let si=0;
+  const vf=el('div','viewfinder');vf.innerHTML=`<svg class="camscene" id="cam-scene"><use href="#${scenes[0]}"/></svg><div class="grid-l"></div>`;
+  const sh=el('button','shutter');
+  wrap.appendChild(vf);wrap.appendChild(sh);
+  v.appendChild(wrap);
+  sh.onclick=()=>{const f=$('#flash');f.animate([{opacity:0},{opacity:.9},{opacity:0}],{duration:260});blip(900,.05,'square',.2);
+    si=(si+1)%scenes.length;$('#cam-scene use').setAttribute('href','#'+scenes[si]);toast('Snap! Saved to the Pond');};
+}
+
+/* =====================================================================
+   TUNES  — stub music player
+   ===================================================================== */
+function renderTunes(v){
+  const head=el('div','app-head');head.innerHTML=`<span class="tab" style="background:#b03ad6">${SVG('app-tunes','tabtile')} Tunes</span>`;
+  v.appendChild(head);
+  const wrap=el('div',null);wrap.id='tunes';
+  const tracks=[{t:'Ribbit Remix',a:'DJ Tadpole',cov:'cov-1'},{t:'Lily Pad Lullaby',a:'The Pond Girls',cov:'cov-2'},{t:'Splash Party',a:'Bonnie & Friends',cov:'cov-3'}];
+  let i=0,playing=false;
+  const cover=el('div','cover');
+  const title=el('div','track-title');
+  const sub=el('div','track-sub');
+  const seek=el('div','seek');seek.innerHTML='<i></i>';
+  const tr=el('div','transport');
+  const prev=el('button',null,SVG('gl-prev','gi'));const play=el('button',null,SVG('gl-play','gi'));const next=el('button',null,SVG('gl-next','gi'));
+  tr.appendChild(prev);tr.appendChild(play);tr.appendChild(next);
+  function set(){cover.innerHTML=SVG(tracks[i].cov,'coverart');title.textContent=tracks[i].t;sub.textContent=tracks[i].a;}
+  function setPlay(p){playing=p;play.innerHTML=SVG(playing?'gl-pause':'gl-play','gi');cover.classList.toggle('spin',playing);if(playing)startTune(tracks[i].cov);else stopTune();}
+  play.onclick=()=>{setPlay(!playing);toast(playing?'Playing':'Paused');};
+  next.onclick=()=>{i=(i+1)%tracks.length;set();sfxTap();if(playing)startTune(tracks[i].cov);};
+  prev.onclick=()=>{i=(i-1+tracks.length)%tracks.length;set();sfxTap();if(playing)startTune(tracks[i].cov);};
+  set();
+  [cover,title,sub,seek,tr].forEach(x=>wrap.appendChild(x));
+  v.appendChild(wrap);
+}
+
+/* =====================================================================
+   SETTINGS  — partly live (volume/brightness/sound)
+   ===================================================================== */
+function renderSettings(v){
+  const head=el('div','app-head');head.innerHTML=`<span class="tab" style="background:#4f6577">${SVG('app-settings','tabtile')} Settings</span>`;
+  v.appendChild(head);
+  // volume
+  v.appendChild(sliderRow('gl-vol','Volume','volume', val=>{S.volume=val;save();}));
+  v.appendChild(sliderRow('gl-sun','Brightness','brightness', val=>{S.brightness=val;save();$('#screen').style.filter=`brightness(${.55+val/100*.6})`;}));
+  v.appendChild(toggleRow('gl-mute','Sound effects','sfx', on=>{S.sfx=on;soundOn=on;save();if(on)sfxTap();}));
+  v.appendChild(toggleRow('frog','Frog voice','frogVoice', on=>{S.frogVoice=on;save();if(on)blip(440,.12,'sine',.2);toast(on?'Ribbit!':'Frog muted');}));
+  // about
+  const about=el('div','set-row');about.style.display='block';
+  about.innerHTML=`<div style="display:flex;align-items:center;gap:3%"><span class="ic2">${SVG('gl-info')}</span><span>About Lilypad</span></div>
+    <p style="font-weight:700;opacity:.85;margin:.6em 0 0;font-size:.8em">Lilypad OS · "The Pond" · v5.0<br>Make friends. Make a splash.<br><span style="opacity:.6">Fan replica — not affiliated with Disney/Pixar.</span></p>`;
+  v.appendChild(about);
+  const reset=el('button','pill-btn',`${SVG('gl-reset')} Reset the Pond`);reset.style.cssText='background:#ff6f61;box-shadow:0 4px 0 #b03a30;color:#fff;margin-top:2%';
+  reset.onclick=()=>{if(confirm('Reset all Pond data?')){localStorage.removeItem('lilypad');S=load();sfxTap();go('home');}};
+  v.appendChild(reset);
+}
+function sliderRow(ic,label,key,fn){
+  const r=el('div','set-row');
+  r.innerHTML=`<span class="ic2">${SVG(ic)}</span><span>${label}</span>`;
+  const sl=el('div','slider');const inp=el('input');inp.type='range';inp.min=0;inp.max=100;inp.value=S[key];
+  inp.oninput=()=>fn(+inp.value);sl.appendChild(inp);r.appendChild(sl);return r;
+}
+function toggleRow(ic,label,key,fn){
+  const r=el('div','set-row');
+  r.innerHTML=`<span class="ic2">${SVG(ic)}</span><span>${label}</span>`;
+  const t=el('div','toggle'+(S[key]?' on':''));t.innerHTML='<b></b>';
+  t.onclick=()=>{const on=!t.classList.contains('on');t.classList.toggle('on',on);fn(on);};
+  r.appendChild(t);return r;
+}
+
+/* apply saved brightness on boot */
+$('#screen').style.filter=`brightness(${.55+S.brightness/100*.6})`;
+
+/* boot (supports deep links like #pond, #games, #guess, #pop) */
+function route(n){
+  if(APPS[n]){go(n);return;}
+  if(n==='guess'||n==='pop'){ go('games'); const v=$('#view-games'); v.innerHTML=''; (n==='guess'?gameGuess:gamePop)(v); return; }
+  go('home');
+}
+route(location.hash.slice(1));
+window.addEventListener('hashchange',()=>route(location.hash.slice(1)));
+</script>
+</body>
+</html>
