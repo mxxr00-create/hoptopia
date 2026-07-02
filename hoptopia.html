@@ -74,6 +74,8 @@ html,body{margin:0;height:100%;position:fixed;inset:0;overflow:hidden;background
 #btnM{background:linear-gradient(160deg,#ff9a4d,#ef6b2a);}
 #btnM.on{outline:4px solid var(--sun);outline-offset:2px;}
 #btnSnap{background:linear-gradient(160deg,#b48cff,#6a2fb0);}
+#btnFish{background:linear-gradient(160deg,#43cea2,#1e8a68);}
+.dexunk{filter:brightness(0) opacity(0.3);}
 
 /* ---- maker palette drawer ---- */
 #palette{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(14px + env(safe-area-inset-bottom));
@@ -238,6 +240,10 @@ html,body{margin:0;height:100%;position:fixed;inset:0;overflow:hidden;background
   <div id="shoppanel"></div>
   <div id="joy"><div id="joyn"></div></div>
   <div id="abtns">
+    <div class="actwrap" id="wrapFish" style="display:none">
+      <button class="act" id="btnFish" aria-label="Fish"><svg viewBox="0 0 24 24"><path d="M4 4c6 0 8 5 8 9a4 4 0 0 1-8 0"/><path d="M12 13c0 4 3 7 7 7"/><circle cx="19" cy="20" r="1.6" fill="#fff" stroke="none"/></svg></button>
+      <span class="alabel">FISH</span>
+    </div>
     <div class="actwrap" id="wrapSnap" style="display:none">
       <button class="act" id="btnSnap" aria-label="Snap a photo"><svg viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2.5"/><circle cx="12" cy="13.5" r="4"/><path d="M9 7l1.5-2.5h3L15 7"/></svg></button>
       <span class="alabel">SNAP</span>
@@ -288,12 +294,13 @@ const clamp=(v,a,b)=>v<a?a:v>b?b:v;
 const lerp=(a,b,t)=>a+(b-a)*t;
 const dist2=(ax,az,bx,bz)=>Math.hypot(ax-bx,az-bz);
 
-const HOP_BUILD='7.02f';
+const HOP_BUILD='7.03';
 let GFXPOLY=false; /* 'Smooth' graphics prototype (low-poly terrain + flat colors) */
 const SAVE_KEY='hoptopia1';
 const DEF_SAVE={started:false,critter:'frog',mode:'',coins:0,inv:{},quests:{},best:{},plot:[],pos:null,sound:true,music:true,tut:false,outfit:{hat:'none',neck:'none'},wardrobe:{}};
 let SV=loadSave();
 SV.q2=SV.q2||{};SV.q2p=SV.q2p||{};
+SV.fish=SV.fish||{};SV.fishBag=SV.fishBag||{};SV.bugs=SV.bugs||{};SV.tools=SV.tools||{};SV.dexRw=SV.dexRw||{};
 GFXPOLY=SV.gfx?SV.gfx==='poly':true;
 if(new URLSearchParams(location.search).has('poly'))GFXPOLY=true;
 if(new URLSearchParams(location.search).has('blocky'))GFXPOLY=false;
@@ -918,6 +925,10 @@ const NPC_DEFS=[
    lines:["Welcome to Pebble Bay! Best skipping stones on the whole pond."]},
   {id:'splash',name:'Splash',sp:'tree',x:BAY.x-6,z:BAY.z-2,r:5,
    lines:["CANNONBALL!!! …oh, hi. The water's great — hop in, you can swim!"]},
+  {id:'marina',name:'Marina',sp:'duck',x:BAY.x+7,z:BAY.z+12,r:3,
+   outfit:{hat:'hat_straw',neck:'none'},
+   lines:["Fresh fish! Get your fresh— oh wait, I BUY the fish, dear.",
+     "Face the water, cast, wait for the SPLASH… then tap quick as a heron!"]},
   {id:'puddles',name:'Captain Puddles',sp:'toad',x:BAY.x,z:BAY.z+16,r:1.5,
    outfit:{hat:'hat_straw',neck:'neck_scarf'},
    lines:["Arr-ribbit! I sailed every puddle from here to the big bog.",
@@ -1115,10 +1126,9 @@ function natTopAt(x,z){
   const base=colI(x,z);
   for(let y=H-1;y>=1;y--){
     const b=world[base+y];
-    if(b===B.air||CROSS.has(b))continue;
+    if(b===B.air||CROSS.has(b)||b===B.water)continue; /* look through water to the bed */
     if(FOLSKIP.has((y*D+z)*W+x))continue; /* tree parts don't cap the ground */
-    if(b===B.water)return -1;
-    if(NATURAL.has(b)){const h=y+1;return h<=WL?-1:h;} /* shorelines smooth too */
+    if(NATURAL.has(b))return y+1; /* beaches AND pond beds smooth together */
     return -1;
   }
   return -1;
@@ -1246,6 +1256,13 @@ function buildChunk(ci,cj){
         const A=[x,c00,z],Bv=[x+1,c10,z],Cv=[x+1,c11,z+1],Dv=[x,c01,z+1];
         pushTri(arr,A,Bv,Cv,t,triLight(A,Bv,Cv,jit));
         pushTri(arr,A,Cv,Dv,t,triLight(A,Cv,Dv,-jit));
+        /* water + foam follow the smooth shoreline, not the block grid */
+        const cMin=Math.min(c00,c10,c01,c11),cMax=Math.max(c00,c10,c01,c11);
+        const WSURF=WL+0.88;
+        if(cMin<WSURF&&gb(x,WL,z)!==B.water)
+          pushQuad(war,[[x,WSURF,z+1],[x+1,WSURF,z+1],[x+1,WSURF,z],[x,WSURF,z]],T.water,[1,1,1,1],[2,2,2,2]);
+        if(cMin<WSURF-0.05&&cMax>WSURF+0.05)
+          pushQuad(war,[[x,WSURF+0.03,z+1],[x+1,WSURF+0.03,z+1],[x+1,WSURF+0.03,z],[x,WSURF+0.03,z]],T.foam,[1,1,1,1],[2,2,2,2]);
       }
     }
     for(let y=0;y<H;y++){
@@ -1256,12 +1273,14 @@ function buildChunk(ci,cj){
         const W2=[2,2,2,2];
         if(gb(x,y+1,z)!==B.water){
           pushQuad(war,[[x,y+0.88,z+1],[x+1,y+0.88,z+1],[x+1,y+0.88,z],[x,y+0.88,z]],T.water,[1,1,1,1],W2);
-          /* shoreline foam strips where water touches land */
-          const yF=y+0.9,a=0.24,LF=[1,1,1,1];
+          /* shoreline foam strips where water touches land (blocky mode) */
+          const yF=y+0.9,a=0.24,LF=GFXPOLY?null:[1,1,1,1];
+          if(LF){
           if(SOLID.has(gb(x+1,y,z)))pushQuad(war,[[x+1-a,yF,z],[x+1,yF,z],[x+1,yF,z+1],[x+1-a,yF,z+1]],T.foam,LF,W2);
           if(SOLID.has(gb(x-1,y,z)))pushQuad(war,[[x,yF,z],[x+a,yF,z],[x+a,yF,z+1],[x,yF,z+1]],T.foam,LF,W2);
           if(SOLID.has(gb(x,y,z+1)))pushQuad(war,[[x,yF,z+1-a],[x+1,yF,z+1-a],[x+1,yF,z+1],[x,yF,z+1]],T.foam,LF,W2);
           if(SOLID.has(gb(x,y,z-1)))pushQuad(war,[[x,yF,z],[x+1,yF,z],[x+1,yF,z+a],[x,yF,z+a]],T.foam,LF,W2);
+          }
         }
         for(let fi=2;fi<6;fi++){const F=FACES[fi];
           if(gb(x+F.n[0],y,z+F.n[2])===B.air){
@@ -1562,7 +1581,15 @@ function ptSolid(px,py,pz){
   if(SOLID.has(b)||b===B.fence){
     /* smooth mode: natural ground is walked via the sheet (smoothGroundY),
        so its blocks stop being invisible stair-step colliders */
-    if(GFXPOLY&&NATURAL.has(b)&&natTopAt(fx,fz)>0)return false;
+    if(GFXPOLY){
+      if(NATURAL.has(b)&&natTopAt(fx,fz)>0)return false;
+      /* old tree blocks are invisible in smooth mode — only the visible
+         trunk column stays solid (canopies are walk-under) */
+      if(FOLSKIP.has((fy*D+fz)*W+fx)){
+        const tr=TREEMAP.get(fx*1024+fz);
+        return !!(tr&&b===B.wood&&fy<tr.g+tr.ht+1);
+      }
+    }
     return true;
   }
   if(gb(fx,fy-1,fz)===B.fence&&py-fy<0.6)return true;
@@ -1595,10 +1622,17 @@ function moveEntity(e,dt){
   e.onGround=e.vy<=0&&boxSolid(e,e.x,e.y-0.06,e.z);
   if(GFXPOLY){ /* the low-poly sheet is the real floor on natural ground */
     const sg=smoothGroundY(e.x,e.z);
-    if(sg>0){
+    if(sg>0&&!boxSolid(e,e.x,sg,e.z)){ /* never snap up into a solid */
       if(e.y<=sg+0.07&&e.vy<=0){e.y=sg;e.vy=0;e.onGround=true;}
       else if(e.y<sg){e.y=sg;if(e.vy<0)e.vy=0;e.onGround=true;}
     }
+  }
+  /* wedged inside something solid (old bug / stale save): pop free */
+  if(e===P){
+    if(boxSolid(e,e.x,e.y,e.z)){
+      e.stuckT=(e.stuckT||0)+dt;
+      if(e.stuckT>0.8){e.stuckT=0;e.y=walkGroundY(e.x,e.z)+0.5;e.vy=0;}
+    }else e.stuckT=0;
   }
   e.x=clamp(e.x,1.5,W-1.5);e.z=clamp(e.z,1.5,D-1.5);
   if(e.y<-6){e.y=groundY(e.x,e.z)+1;e.vy=0;}
@@ -1932,6 +1966,7 @@ bindBtn($('#btnB'),()=>uiButtonB());
 bindBtn($('#btnM'),()=>toggleMaker());
 bindBtn($('#btnPause'),()=>openPause());
 bindBtn($('#btnSnap'),()=>{if(!modalOpen&&!SHOP.active)doSnap();});
+bindBtn($('#btnFish'),()=>{if(!modalOpen&&!SHOP.active)fishPress();});
 bindBtn($('#btnInv'),()=>openInventory());
 function uiButtonA(){
   if(modalOpen||SHOP.active)return;
@@ -2052,6 +2087,14 @@ function buildLines(n){
     if(q.type==='deliver'&&q.target===n.id&&st===1)
       ls.push({q2give:q,text:q.deliver});
   }
+  if(n.id==='marina'){
+    if(!SV.tools.rod)ls.push({rod:true,text:'A brand-new angler! Here — your first fishing rod is on the house.'});
+    else{
+      const bag=fishBagTotal();
+      if(bag.n>0)ls.push({sellfish:true,text:'Ooh, '+bag.n+' fish in your creel! I’ll pay '+bag.v+' coins for the lot.'});
+      else ls.push({text:'Empty creel? Face the water, tap FISH to cast, and strike on the splash!'});
+    }
+  }
   if(n.shop)ls.push({shop:true,text:'Want to browse the racks, dearie?'});
   if(n.trade){
     const tr=n.trade;
@@ -2082,6 +2125,17 @@ function showLine(){
         addCoins(n.quest.coins);
         dialog.lines=[n.quest.thanks];dialog.i=0;showLine();});
       dbtn('Not yet',dialogSkip,true);}
+    if(L.rod){dbtn('Take the rod!',()=>{
+        SV.tools.rod=1;save();sCoin();
+        toast('You got a fishing rod! Find water and tap FISH.');
+        dialog.lines=['Cast near ripples, wait for the SPLASH, then tap FISH again — quick!'];dialog.i=0;showLine();
+      });}
+    if(L.sellfish){dbtn('Sell the catch!',()=>{
+        const bag=fishBagTotal();
+        SV.fishBag={};save();addCoins(bag.v);
+        dialog.lines=['Lovely fish! Come back with more any time.'];dialog.i=0;showLine();
+      });
+      dbtn('Keep them',dialogSkip,true);}
     if(L.q2ask){dbtn('I’m on it!',()=>q2accept(L.q2ask));
       dbtn('Maybe later',dialogSkip,true);}
     if(L.q2give){dbtn('Here you go!',()=>{
@@ -2633,6 +2687,7 @@ function openPause(){
      [SV.sound?'Sound: ON':'Sound: OFF','purple',()=>{SV.sound=!SV.sound;save();closeModal();openPause();}],
      [SV.music?'Music: ON':'Music: OFF','purple',()=>{SV.music=!SV.music;save();
         if(SV.music)musStart();else musStop();closeModal();openPause();}],
+     ['Pond-o-dex','blue',()=>{closeModal();openDex();}],
      [GFXPOLY?'Graphics: Smooth (new!)':'Graphics: Blocky','purple',()=>{
         GFXPOLY=!GFXPOLY;SV.gfx=GFXPOLY?'poly':'blocky';save();closeModal();
         $('#loading .t').textContent='Repainting the pond…';
@@ -2781,6 +2836,8 @@ function frame(now){
         0.25,0.12,0.18,4+Math.random()*3,night?'#d8ff6e':'#fff6c0',night?0.08:0.05,0);}}
   updateParts(dt);
   questTick(dt);
+  fishTick();
+  bugTick(dt);
   abtnsEl.classList.toggle('dim',P.moving&&!modalOpen&&!dialog.npc);
   for(const n of NPCS)if(Math.hypot(n.x-P.x,n.z-P.z)<48)updateNPC(n,dt);
   updateBangs();
@@ -2808,6 +2865,12 @@ function frame(now){
       drawBox(mMul(mT(CHEST.x,CHEST.y+0.35+bob,CHEST.z),mMul(mRY(t*1.2),mS(0.55,0.4,0.4))),'#8a5a2c');
       drawBox(mMul(mT(CHEST.x,CHEST.y+0.58+bob,CHEST.z),mMul(mRY(t*1.2),mS(0.58,0.14,0.44))),'#ffd23e');
     }
+    if(FISHING){
+      const dip=FISHING.state==='bite'?-0.22:Math.sin(t*3)*0.05;
+      drawBox(mMul(mT(FISHING.x,FISHING.y+dip,FISHING.z),mS(0.16,0.16,0.16)),'#ffffff');
+      drawBox(mMul(mT(FISHING.x,FISHING.y+dip+0.1,FISHING.z),mS(0.17,0.08,0.17)),'#e04848');
+    }
+    for(const b of BUGS)drawBug(b,t);
     /* particles + lantern glow + blob shadows (soft, blended) */
     gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
     gl.depthMask(false);
@@ -3466,6 +3529,178 @@ function mpTick(dt,t,pv){
 bindBtn($('#btnSay'),mpEmoteBar);
 bindBtn($('#chipMP'),()=>mpPanel());
 
+/* ========== 13. Phase 2: fishing, bug catching, Pond-o-dex ========== */
+const FISH_DEFS=[
+ {id:'minnow',name:'Minnow',w:30,val:1,c1:'#9fc7d8',c2:'#7da8bc'},
+ {id:'bluegill',name:'Bluegill',w:20,val:2,c1:'#4a90e2',c2:'#2e6db4'},
+ {id:'perch',name:'Sunny Perch',w:16,val:2,c1:'#ffd23e',c2:'#e0a81c'},
+ {id:'catfish',name:'Mud Catfish',w:10,val:3,c1:'#8a6a4a',c2:'#6f4f33'},
+ {id:'bubble',name:'Bubblefish',w:8,val:3,c1:'#ff9cbd',c2:'#e06a94'},
+ {id:'trout',name:'Lily Trout',w:6,val:4,c1:'#7dd13f',c2:'#4f9e23'},
+ {id:'moon',name:'Moon Carp',w:6,val:5,night:true,c1:'#dfe9ff',c2:'#9fb4d8'},
+ {id:'koi',name:'Golden Koi',w:2.5,val:10,cove:true,rare:true,c1:'#ffb02e',c2:'#e07818'},
+];
+const BUG_DEFS=[
+ {id:'sunfly',name:'Sunny Butterfly',c1:'#ffd23e',c2:'#e07818',biome:[0],day:true,w:24},
+ {id:'rosefly',name:'Rose Butterfly',c1:'#f25c97',c2:'#d63b86',biome:[0],day:true,w:18},
+ {id:'beetle',name:'Acorn Beetle',c1:'#8a5a2c',c2:'#5a3a1c',biome:[1],day:true,w:14},
+ {id:'dragonfly',name:'Zippy Dragonfly',c1:'#4dd2ff',c2:'#1f8fd0',water:true,day:true,w:12},
+ {id:'moth',name:'Emerald Moth',c1:'#7df0b6',c2:'#28c87e',biome:[0,1],night:true,w:12},
+ {id:'skimmer',name:'Pond Skimmer',c1:'#b48cff',c2:'#6a2fb0',water:true,w:8},
+];
+const svgData=x=>'data:image/svg+xml,'+encodeURIComponent(x);
+function fishSVG(f){return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 24">'
+ +'<path d="M27 12 L38 4 V20 Z" fill="'+f.c2+'"/>'
+ +'<ellipse cx="16" cy="12" rx="13" ry="8" fill="'+f.c1+'"/>'
+ +'<ellipse cx="16" cy="15" rx="10" ry="4" fill="'+f.c2+'" opacity=".45"/>'
+ +'<circle cx="9" cy="10" r="2.2" fill="#fff"/><circle cx="9" cy="10" r="1.1" fill="#16242e"/>'
+ +'<path d="M14 4 L18 8 L10 8 Z" fill="'+f.c2+'"/></svg>';}
+function bugSVG(b){return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 24">'
+ +'<ellipse cx="9" cy="9" rx="7" ry="6" fill="'+b.c1+'"/>'
+ +'<ellipse cx="23" cy="9" rx="7" ry="6" fill="'+b.c1+'"/>'
+ +'<ellipse cx="10" cy="17" rx="5" ry="4" fill="'+b.c2+'"/>'
+ +'<ellipse cx="22" cy="17" rx="5" ry="4" fill="'+b.c2+'"/>'
+ +'<rect x="14" y="6" width="4" height="14" rx="2" fill="#3a2f2a"/>'
+ +'<circle cx="15" cy="5" r="1.4" fill="#3a2f2a"/><circle cx="17" cy="5" r="1.4" fill="#3a2f2a"/></svg>';}
+const FISHICON={},BUGICON={};
+for(const f of FISH_DEFS)FISHICON[f.id]=svgData(fishSVG(f));
+for(const b of BUG_DEFS)BUGICON[b.id]=svgData(bugSVG(b));
+
+/* ---- fishing ---- */
+let FISHING=null;
+function castTargetWater(){
+  const fx=-Math.sin(cam.yaw),fz=-Math.cos(cam.yaw);
+  for(let d=2.2;d<=6.5;d+=0.8){
+    const X=Math.floor(P.x+fx*d),Z=Math.floor(P.z+fz*d);
+    if(gb(X,WL,Z)===B.water)return [P.x+fx*d,WL+0.92,P.z+fz*d];
+  }
+  return null;
+}
+function pickFish(){
+  const night=NIGHTA>0.35,cove=Math.hypot(P.x-COVE.x,P.z-COVE.z)<26;
+  const pool=FISH_DEFS.map(f=>({f,w:f.w*(f.night?(night?3:0.12):1)*(f.cove?(cove?3:0.15):1)}));
+  const tot=pool.reduce((a,p)=>a+p.w,0);
+  let r=Math.random()*tot;
+  for(const p of pool){r-=p.w;if(r<=0)return p.f;}
+  return FISH_DEFS[0];
+}
+function fishPress(){
+  if(!SV.tools.rod)return;
+  if(FISHING){
+    if(FISHING.state==='bite'){
+      const f=pickFish();
+      SV.fish[f.id]=(SV.fish[f.id]||0)+1;
+      SV.fishBag[f.id]=(SV.fishBag[f.id]||0)+1;
+      save();
+      burst(FISHING.x,FISHING.y+0.3,FISHING.z,12,'#cfeeff',2.2,2.6,8,0.1);
+      FISHING=null;
+      sWin();
+      popLabel('+1 '+f.name,FISHICON[f.id]);
+      toast(f.rare?'A GOLDEN KOI! Marina won’t believe this!':'Caught a '+f.name+'!');
+    }else{FISHING=null;toast('Reeled in too soon — wait for the splash!');sBad();}
+    return;
+  }
+  const t=castTargetWater();
+  if(!t){toast('Face the water to cast!');return;}
+  FISHING={state:'wait',x:t[0],y:t[1],z:t[2],tBite:performance.now()+1500+Math.random()*3500};
+  sHop();
+  burst(t[0],t[1],t[2],5,'#cfeeff',1.1,1.1,6,0.06);
+}
+function fishTick(){
+  if(!FISHING)return;
+  if(Math.hypot(P.x-FISHING.x,P.z-FISHING.z)>9||P.inWater){FISHING=null;return;}
+  const now=performance.now();
+  if(FISHING.state==='wait'&&now>=FISHING.tBite){
+    FISHING.state='bite';FISHING.tEnd=now+1000;
+    blip(880,.1,'square',.22);
+    burst(FISHING.x,FISHING.y,FISHING.z,9,'#cfeeff',1.9,1.7,8,0.09);
+  }else if(FISHING.state==='bite'&&now>FISHING.tEnd){
+    FISHING=null;toast('It got away!');sBad();
+  }
+}
+function fishBagTotal(){let n=0,v=0;
+  for(const f of FISH_DEFS){const c=SV.fishBag[f.id]||0;n+=c;v+=c*f.val;}
+  return {n,v};}
+
+/* ---- bug catching ---- */
+const BUGS=[];
+let bugT=0;
+function bugTick(dt){
+  bugT-=dt;
+  for(let i=BUGS.length-1;i>=0;i--){
+    const b=BUGS[i];
+    b.t+=dt;b.a+=dt*(1.5+b.sp);
+    b.x+=Math.sin(b.a*1.9)*dt*1.4;
+    b.z+=Math.cos(b.a*1.4)*dt*1.4;
+    b.y=b.baseY+Math.sin(b.a*2.3)*0.5;
+    if(b.t>b.life){BUGS.splice(i,1);continue;}
+    if(Math.hypot(b.x-P.x,b.y-(P.y+1),b.z-P.z)<1.2){
+      SV.bugs[b.def.id]=(SV.bugs[b.def.id]||0)+1;save();
+      sPick();popLabel('+1 '+b.def.name,BUGICON[b.def.id]);
+      BUGS.splice(i,1);
+    }
+  }
+  if(bugT>0||BUGS.length>=4)return;
+  bugT=1.4;
+  const night=NIGHTA>0.35;
+  const bio=bioMap[Math.floor(P.z)*W+Math.floor(P.x)];
+  const nearWaterHere=gb(Math.floor(P.x)+3,WL,Math.floor(P.z))===B.water||gb(Math.floor(P.x)-3,WL,Math.floor(P.z))===B.water
+    ||gb(Math.floor(P.x),WL,Math.floor(P.z)+3)===B.water||gb(Math.floor(P.x),WL,Math.floor(P.z)-3)===B.water;
+  const pool=BUG_DEFS.filter(b=>
+    (b.night?night:(b.day?!night:true))&&
+    (b.water?nearWaterHere:(b.biome?b.biome.indexOf(bio)>=0:true)));
+  if(!pool.length||Math.random()<0.5)return;
+  const def=pool[Math.floor(Math.random()*pool.length)];
+  const a=Math.random()*6.2832,r=4+Math.random()*6;
+  const bx=P.x+Math.sin(a)*r,bz=P.z+Math.cos(a)*r;
+  BUGS.push({def,x:bx,z:bz,baseY:walkGroundY(bx,bz)+1+Math.random()*1.2,y:0,
+    a:Math.random()*7,sp:Math.random(),t:0,life:22+Math.random()*15});
+}
+function drawBug(b,t){
+  const flap=0.5+Math.abs(Math.sin(t*16+b.a))*0.6;
+  drawBox(mMul(mT(b.x,b.y,b.z),mS(0.08,0.16,0.08)),'#3a2f2a');
+  drawBox(mMul(mT(b.x-0.1*flap,b.y+0.04,b.z),mS(0.16*flap,0.04,0.13)),b.def.c1);
+  drawBox(mMul(mT(b.x+0.1*flap,b.y+0.04,b.z),mS(0.16*flap,0.04,0.13)),b.def.c1);
+}
+
+/* ---- Pond-o-dex ---- */
+const DEX_PAGES=[
+ {id:'fish',name:'Fish',reward:30,total:()=>FISH_DEFS.length,got:()=>FISH_DEFS.filter(f=>SV.fish[f.id]).length},
+ {id:'bugs',name:'Bugs',reward:20,total:()=>BUG_DEFS.length,got:()=>BUG_DEFS.filter(b=>SV.bugs[b.id]).length},
+ {id:'fits',name:'Outfits',reward:30,total:()=>SHOP_ITEMS.length,got:()=>SHOP_ITEMS.filter(i=>SV.wardrobe[i.id]||i.cost===0).length},
+ {id:'quests',name:'Quests',reward:40,total:()=>5+QDEFS.length,
+  got:()=>['tilly','mallory','bramble','shelly','mayor'].filter(k=>SV.quests[k]===2).length
+        +QDEFS.filter(q=>q2get(q.id)===2).length},
+];
+function openDex(){
+  if(modalOpen)closeModal();
+  let html='<h2>Pond-o-dex</h2>';
+  for(const pg of DEX_PAGES){
+    const got=pg.got(),tot=pg.total(),full=got>=tot;
+    html+='<p style="margin:8px 0 2px;font-weight:900;color:var(--grape)">'+pg.name+' — '+got+'/'+tot
+      +(full&&!SV.dexRw[pg.id]?' <button class="shopb" data-dex="'+pg.id+'" style="background:linear-gradient(160deg,#ffd23e,#f0a51c);color:#5a3a00">Claim +'+pg.reward+'</button>'
+      :full?' <span style="color:#2f8b22">★ complete</span>':'')+'</p>';
+    if(pg.id==='fish'){
+      html+='<div class="invgrid">';
+      for(const f of FISH_DEFS){const c=SV.fish[f.id]||0;
+        html+='<div class="invcell"><img src="'+FISHICON[f.id]+'"'+(c?'':' class="dexunk"')+'><b>'+(c||'')+'</b><span>'+(c?f.name:'???')+'</span></div>';}
+      html+='</div>';
+    }else if(pg.id==='bugs'){
+      html+='<div class="invgrid">';
+      for(const b of BUG_DEFS){const c=SV.bugs[b.id]||0;
+        html+='<div class="invcell"><img src="'+BUGICON[b.id]+'"'+(c?'':' class="dexunk"')+'><b>'+(c||'')+'</b><span>'+(c?b.name:'???')+'</span></div>';}
+      html+='</div>';
+    }
+  }
+  html+='<p class="dim">Catch fish with Marina’s rod · walk up to bugs to catch them!</p>';
+  openModal(html,[['Close','gray',closeModal]]);
+  document.querySelectorAll('[data-dex]').forEach(b=>{
+    b.onclick=()=>{
+      const pg=DEX_PAGES.find(p=>p.id===b.dataset.dex);
+      SV.dexRw[pg.id]=1;addCoins(pg.reward);save();openDex();
+    };});
+}
+
 /* ========== 12. Phase 1 quests: deliveries, photos, seek, clocks, daily, treasure ========== */
 const QDEFS=[
  {id:'d1',type:'deliver',giver:'mayor',target:'wart',coins:8,name:'Festival Invitation',
@@ -3660,9 +3895,11 @@ function questTick(dt){
       updateHUD();
     }
   }
-  /* SNAP button visibility */
+  /* SNAP + FISH button visibility */
   const ws=$('#wrapSnap');
   if(ws)ws.style.display=anyPhotoActive()&&!SHOP.active?'flex':'none';
+  const wf=$('#wrapFish');
+  if(wf)wf.style.display=(SV.tools.rod&&!SHOP.active&&!P.inWater&&(FISHING||castTargetWater()))?'flex':'none';
 }
 /* quest board UI */
 const QGLYPH={deliver:'→',photo:'◉',seek:'?',fireflies:'✦',dew:'❀',hunt:'✕',fetch:'✿',wear:'❖'};
@@ -3701,7 +3938,9 @@ function openQuestBoard(){
   for(const q of QDEFS){
     rows+='<div class="mprow"><span class="who">'+QGLYPH[q.type]+' <b>'+q.name+'</b> — '+q2status(q)+'</span></div>';
   }
-  openModal('<h2>Quest Board</h2>'+daily+rows,[['Close','gray',closeModal]]);
+  openModal('<h2>Quest Board</h2>'+daily+rows,
+    [['Pond-o-dex','purple',()=>{closeModal();openDex();}],
+     ['Close','gray',closeModal]]);
   const db=$('#dailyBtn');if(db)db.onclick=handInDaily;
 }
 
