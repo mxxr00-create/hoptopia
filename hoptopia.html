@@ -400,7 +400,7 @@ function critterSVG(sp){const s=SPECIES[sp];
   (s.teeth?`<rect x="43" y="56" width="6" height="9" rx="1.5" fill="#fff"/><rect x="51" y="56" width="6" height="9" rx="1.5" fill="#fff"/>`:'')+
   `</svg>`;}
 /* ========== 3. world generation ========== */
-const W=256,H=44,D=256,WL=11; /* city + towns sit in the south-west; wilds beyond */
+const W=320,H=44,D=320,WL=11;
 const world=new Uint8Array(W*H*D);
 const colI=(x,z)=>(z*W+x)*H;
 const gb=(x,y,z)=>(x<0||y<0||z<0||x>=W||y>=H||z>=D)?0:world[colI(x,z)+y];
@@ -422,13 +422,13 @@ function vnoise(x,z){const xi=Math.floor(x),zi=Math.floor(z),xf=x-xi,zf=z-zi,s=t
 const fbm=(x,z)=>vnoise(x,z)*.55+vnoise(x*2.17,z*2.17)*.28+vnoise(x*4.31,z*4.31)*.17;
 
 /* named places — Lilyopolis (city), three towns, arenas, Maker Isle */
-const CITY={x:96,z:96,r:30,h:13},
-      MAKER={x:34,z:34,r:19,h:14},
-      REED={x:52,z:150,r:13,h:12,g:B.mud},
-      MOSS={x:150,z:44,r:14,h:15},
-      BAY={x:152,z:152,r:13,h:12,g:B.sand},
-      POOL={x:96,z:140,r:12,h:8},
-      GARDEN={x:136,z:78,r:11,h:13};
+const CITY={x:120,z:120,r:42,h:13},
+      MAKER={x:44,z:44,r:19,h:14},
+      REED={x:64,z:196,r:16,h:12,g:B.mud},
+      MOSS={x:196,z:56,r:17,h:15},
+      BAY={x:204,z:204,r:16,h:12,g:B.sand},
+      POOL={x:120,z:176,r:13,h:8},
+      GARDEN={x:172,z:96,r:12,h:13};
 const ZONES=[CITY,MAKER,REED,MOSS,BAY,POOL,GARDEN];
 const CLEAN=new Set([CITY,MAKER,POOL,GARDEN]);
 function zoneAt(x,z){let best=null,bt=0;
@@ -500,25 +500,31 @@ function clearAbove(x0,z0,x1,z1,g){for(let x=x0;x<=x1;x++)for(let z=z0;z<=z1;z++
 function floorPad(x0,z0,x1,z1,g,b){for(let x=x0;x<=x1;x++)for(let z=z0;z<=z1;z++)sb(x,g-1,z,b);}
 function lamp(x,z,g){sb(x,g,z,B.wood);sb(x,g+1,z,B.wood);sb(x,g+2,z,B.lantern);}
 function hut(cx,cz,g,wall,roof){
-  clearAbove(cx-2,cz-2,cx+2,cz+2,g);
-  floorPad(cx-2,cz-2,cx+2,cz+2,g,B.plank);
-  for(let x=cx-2;x<=cx+2;x++)for(let z=cz-2;z<=cz+2;z++){
-    if(x===cx-2||x===cx+2||z===cz-2||z===cz+2)for(let y=g;y<g+3;y++)sb(x,y,z,wall);}
-  sb(cx,g,cz+2,B.air);sb(cx,g+1,cz+2,B.air);
+  clearAbove(cx-4,cz-4,cx+4,cz+4,g);
+  floorPad(cx-3,cz-3,cx+3,cz+3,g,B.plank);
+  for(let x=cx-3;x<=cx+3;x++)for(let z=cz-3;z<=cz+3;z++){
+    if(x===cx-3||x===cx+3||z===cz-3||z===cz+3)for(let y=g;y<g+4;y++)sb(x,y,z,wall);}
+  /* wide welcoming doorway on the south side */
+  for(let dx=-1;dx<=1;dx++)for(let y=g;y<g+2;y++)sb(cx+dx,y,cz+3,B.air);
+  /* glowing windows + cozy light inside */
+  sb(cx-3,g+2,cz,B.lantern);sb(cx+3,g+2,cz,B.lantern);
+  sb(cx-2,g,cz-2,B.lantern);
   let lvl=0;
-  for(let s=3;s>=0;s--){fillB(cx-s,g+3+lvl,cz-s,cx+s,g+3+lvl,cz+s,roof);lvl++;}
-  sb(cx+2,g,cz+3,B.lantern);
+  for(let s=4;s>=0;s--){fillB(cx-s,g+4+lvl,cz-s,cx+s,g+4+lvl,cz+s,roof);lvl++;}
+  sb(cx+2,g,cz+4,B.lantern);
 }
 function shroomHouse(cx,cz,g,cap){
-  clearAbove(cx-3,cz-3,cx+3,cz+3,g);
-  floorPad(cx-2,cz-2,cx+2,cz+2,g,B.dirt);
-  for(let x=cx-2;x<=cx+2;x++)for(let z=cz-2;z<=cz+2;z++){
-    if(Math.abs(x-cx)===2||Math.abs(z-cz)===2)for(let y=g;y<g+3;y++)sb(x,y,z,B.stem);}
-  sb(cx,g,cz+2,B.air);sb(cx,g+1,cz+2,B.air);
-  fillB(cx-3,g+3,cz-3,cx+3,g+4,cz+3,cap);
-  fillB(cx-2,g+5,cz-2,cx+2,g+5,cz+2,cap);
-  fillB(cx-1,g+6,cz-1,cx+1,g+6,cz+1,cap);
-  sb(cx+3,g,cz+3,B.shroom);
+  clearAbove(cx-4,cz-4,cx+4,cz+4,g);
+  floorPad(cx-3,cz-3,cx+3,cz+3,g,B.dirt);
+  for(let x=cx-3;x<=cx+3;x++)for(let z=cz-3;z<=cz+3;z++){
+    if(Math.abs(x-cx)===3||Math.abs(z-cz)===3)for(let y=g;y<g+4;y++)sb(x,y,z,B.stem);}
+  for(let dx=-1;dx<=1;dx++)for(let y=g;y<g+2;y++)sb(cx+dx,y,cz+3,B.air);
+  fillB(cx-4,g+4,cz-4,cx+4,g+5,cz+4,cap);
+  fillB(cx-3,g+6,cz-3,cx+3,g+6,cz+3,cap);
+  fillB(cx-2,g+7,cz-2,cx+2,g+7,cz+2,cap);
+  fillB(cx-1,g+8,cz-1,cx+1,g+8,cz+1,cap);
+  sb(cx-2,g,cz-2,B.lantern);
+  sb(cx+4,g,cz+4,B.shroom);
 }
 function tower(cx,cz,g,cap){
   cap=cap||B.roofP;
@@ -530,17 +536,21 @@ function tower(cx,cz,g,cap){
   sb(cx,g+9,cz,B.lantern);
 }
 function lodge(cx,cz,g){
-  clearAbove(cx-5,cz-4,cx+5,cz+4,g);
-  floorPad(cx-5,cz-4,cx+5,cz+4,g,B.plank);
-  for(let x=cx-5;x<=cx+5;x++)for(let z=cz-4;z<=cz+4;z++){
-    if(x===cx-5||x===cx+5||z===cz-4||z===cz+4)for(let y=g;y<g+4;y++)sb(x,y,z,B.mud);}
-  fillB(cx-5,g+4,cz-4,cx+5,g+4,cz+4,B.plank);
-  fillB(cx-3,g+5,cz-2,cx+3,g+5,cz+2,B.roofP);
-  fillB(cx-1,g+6,cz,cx+1,g+6,cz,B.roofP);
-  for(let dx=-1;dx<=1;dx++){sb(cx+dx,g,cz+4,B.air);sb(cx+dx,g+1,cz+4,B.air);}
-  sb(cx-3,g+2,cz+4,B.lantern);sb(cx+3,g+2,cz+4,B.lantern);
-  lamp(cx-4,cz+6,g);lamp(cx+4,cz+6,g);
-  sb(cx,g+7,cz,B.flag);
+  clearAbove(cx-7,cz-5,cx+7,cz+5,g);
+  floorPad(cx-7,cz-5,cx+7,cz+5,g,B.plank);
+  for(let x=cx-7;x<=cx+7;x++)for(let z=cz-5;z<=cz+5;z++){
+    if(x===cx-7||x===cx+7||z===cz-5||z===cz+5)for(let y=g;y<g+5;y++)sb(x,y,z,B.mud);}
+  fillB(cx-7,g+5,cz-5,cx+7,g+5,cz+5,B.plank);
+  fillB(cx-5,g+6,cz-3,cx+5,g+6,cz+3,B.roofP);
+  fillB(cx-3,g+7,cz-1,cx+3,g+7,cz+1,B.roofP);
+  /* grand doorway */
+  for(let dx=-1;dx<=1;dx++)for(let y=g;y<g+3;y++)sb(cx+dx,y,cz+5,B.air);
+  sb(cx-4,g+2,cz+5,B.lantern);sb(cx+4,g+2,cz+5,B.lantern);
+  /* hall interior: lit corners + a little podium */
+  sb(cx-5,g,cz-3,B.lantern);sb(cx+5,g,cz-3,B.lantern);
+  sb(cx,g,cz-3,B.plank);sb(cx,g+1,cz-3,B.flag);
+  lamp(cx-5,cz+7,g);lamp(cx+5,cz+7,g);
+  sb(cx,g+8,cz,B.flag);
 }
 function stall(cx,cz,g){
   clearAbove(cx-2,cz-1,cx+2,cz+1,g);
@@ -585,42 +595,59 @@ function buildArcade(ax,az,g){
 }
 const ARCADE={x:0,z:0,g:0};
 
+function boutique(cx,cz,g){
+  clearAbove(cx-5,cz-4,cx+5,cz+4,g);
+  floorPad(cx-4,cz-3,cx+4,cz+3,g,B.plank);
+  for(let x=cx-4;x<=cx+4;x++)for(let z=cz-3;z<=cz+3;z++){
+    if(x===cx-4||x===cx+4||z===cz-3||z===cz+3)for(let y=g;y<g+4;y++)sb(x,y,z,B.plank);}
+  for(let dx=-1;dx<=1;dx++)for(let y=g;y<g+2;y++)sb(cx+dx,y,cz+3,B.air);
+  let lvl=0;
+  for(let s=4;s>=0;s--){fillB(cx-s,g+4+lvl,cz-s,cx+s,g+4+lvl,cz+s,B.roofP);lvl++;}
+  /* shop counter + lit racks */
+  for(let x=cx-2;x<=cx+2;x++)sb(x,g,cz-1,B.plank);
+  sb(cx-3,g,cz-2,B.lantern);sb(cx+3,g,cz-2,B.flowP);
+  sb(cx-3,g+2,cz+3,B.lantern);sb(cx+3,g+2,cz+3,B.lantern);
+  sb(cx,g+3,cz+4,B.flag);
+  sb(cx-2,g,cz+4,B.flowP);sb(cx+2,g,cz+4,B.flowY);
+}
 function buildCity(){
   const g=CITY.h,cx=CITY.x,cz=CITY.z;
-  for(let z=cz-28;z<=cz+28;z++)for(let x=cx-28;x<=cx+28;x++){
+  for(let z=cz-40;z<=cz+40;z++)for(let x=cx-40;x<=cx+40;x++){
     const d=Math.hypot(x-cx,z-cz);
-    if(d>=28)continue;
-    if(Math.abs(d-21)<1.3||Math.abs(x-cx)<1.6||Math.abs(z-cz)<1.6||d<7)sb(x,g-1,z,B.path);
+    if(d>=40)continue;
+    if(Math.abs(d-30)<1.6||Math.abs(x-cx)<2.1||Math.abs(z-cz)<2.1||d<9)sb(x,g-1,z,B.path);
   }
-  for(let dx=-2;dx<=2;dx++)for(let dz=-2;dz<=2;dz++){
+  /* grand fountain */
+  for(let dx=-3;dx<=3;dx++)for(let dz=-3;dz<=3;dz++){
     const dd=Math.max(Math.abs(dx),Math.abs(dz));
-    sb(cx+dx,g,cz+dz,dd===2?B.stone:B.water);}
-  sb(cx,g+1,cz,B.stone);sb(cx,g+2,cz,B.water);
-  lodge(cx,cz-14,g);
-  tower(cx-14,cz-10,g,B.roofP);tower(cx+14,cz-10,g,B.roofB);tower(cx+18,cz+6,g,B.capR);
-  stall(cx+9,cz-2,g);stall(cx+9,cz+3,g);
-  const hs=[[-19,7],[-16,12],[-7,18],[7,19],[11,15],[19,7],[17,-14],[7,-19],[-11,-18]];
+    sb(cx+dx,g,cz+dz,dd===3?B.stone:B.water);}
+  sb(cx,g+1,cz,B.stone);sb(cx,g+2,cz,B.stone);sb(cx,g+3,cz,B.water);
+  lodge(cx,cz-20,g);
+  tower(cx-20,cz-14,g,B.roofP);tower(cx+20,cz-14,g,B.roofB);
+  tower(cx+24,cz+8,g,B.capR);tower(cx-24,cz+8,g,B.capP);
+  stall(cx+12,cz-4,g);stall(cx+12,cz+2,g);stall(cx+16,cz-1,g);
+  const hs=[[-27,10],[-23,18],[-10,26],[10,27],[16,22],[27,10],[24,-18],[10,-27],[-16,-25],[-27,-8]];
   hs.forEach((p,i)=>hut(cx+p[0],cz+p[1],g,i%2?B.mud:B.plank,i%2?B.roofB:B.roofP));
-  for(let i=-24;i<=24;i+=12){if(Math.abs(i)>4){lamp(cx+i,cz+2,g);lamp(cx+2,cz+i,g);}}
-  buildArcade(cx-11,cz+9,g);
-  /* Madame Poppy's Boutique */
-  hut(cx+14,cz+9,g,B.plank,B.roofP);
-  sb(cx+14,g+2,cz+12,B.flag);
-  sb(cx+12,g,cz+12,B.flowP);sb(cx+16,g,cz+12,B.flowY);
+  for(let i=-36;i<=36;i+=12){if(Math.abs(i)>6){lamp(cx+i,cz+3,g);lamp(cx+3,cz+i,g);}}
+  buildArcade(cx-16,cz+13,g);
+  boutique(cx+18,cz+12,g);
   /* flower planters on the plaza */
-  [[-5,-5],[5,-5],[-5,5],[5,5]].forEach(p=>{sb(cx+p[0],g-1,cz+p[1],B.dirt);sb(cx+p[0],g,cz+p[1],(p[0]+p[1])%2?B.flowP:B.flowY);});
+  [[-6,-6],[6,-6],[-6,6],[6,6]].forEach(p=>{sb(cx+p[0],g-1,cz+p[1],B.dirt);sb(cx+p[0],g,cz+p[1],(p[0]+p[1])%2?B.flowP:B.flowY);});
 }
 
 /* Lily Hop parkour course — over the pool south of the city */
-const PADS=[[96,129,11],[96,132,11],[98,134,12],[98,137,12],[96,139,13],
-            [93,139,13],[91,141,14],[91,144,14],[93,146,15],[96,146,15]];
+const HOPX=POOL.x,HOPZ0=CITY.z+CITY.r; /* course begins at the city's south edge */
+const PADS=[[0,3,11],[0,6,11],[2,8,12],[2,11,12],[0,13,13],
+            [-3,13,13],[-5,15,14],[-5,18,14],[-3,20,15],[0,20,15]]
+  .map(p=>[HOPX+p[0],HOPZ0+p[1],p[2]]);
 const HOP_CPS=[0,3,6,9];
 function buildCourse(){
-  fillB(94,12,124,98,12,128,B.plank);
+  fillB(HOPX-2,12,HOPZ0-4,HOPX+2,12,HOPZ0+2,B.plank);
   for(const p of PADS)for(let dx=0;dx<=1;dx++)for(let dz=0;dz<=1;dz++)sb(p[0]+dx,p[2],p[1]+dz,B.lily);
-  fillB(95,15,145,98,15,148,B.plank);
-  sb(96,16,147,B.flag);sb(98,16,145,B.lantern);
-  MINI.hop.start=[96.5,13.2,126.5];
+  fillB(HOPX-1,15,HOPZ0+19,HOPX+2,15,HOPZ0+22,B.plank);
+  sb(HOPX,16,HOPZ0+21,B.flag);sb(HOPX+2,16,HOPZ0+19,B.lantern);
+  MINI.hop.start=[HOPX+0.5,13.2,HOPZ0+0.5];
+  MINI.hop.fin=[HOPX+0.5,16,HOPZ0+21.5];
 }
 
 /* Berry Scramble garden */
@@ -656,27 +683,27 @@ function buildMaker(){
 
 function buildTowns(){
   /* Reedville — swamp village */
-  [[0,0],[-7,3],[7,2],[-3,-7],[6,-5]].forEach(p=>hut(REED.x+p[0],REED.z+p[1],REED.h,B.plank,B.roofB));
-  lamp(REED.x,REED.z+7,REED.h);sb(REED.x+1,REED.h,REED.z+7,B.flag);
+  [[0,0],[-10,4],[10,2],[-5,-10],[9,-9]].forEach(p=>hut(REED.x+p[0],REED.z+p[1],REED.h,B.plank,B.roofB));
+  lamp(REED.x,REED.z+8,REED.h);sb(REED.x+1,REED.h,REED.z+8,B.flag);
   /* Mosshollow — mushroom houses in the forest */
-  [[0,0],[-8,2],[8,3],[0,-8]].forEach((p,i)=>shroomHouse(MOSS.x+p[0],MOSS.z+p[1],MOSS.h,i%2?B.capP:B.capR));
-  lamp(MOSS.x,MOSS.z+8,MOSS.h);sb(MOSS.x+1,MOSS.h,MOSS.z+8,B.flag);
+  [[0,0],[-12,3],[12,4],[0,-12]].forEach((p,i)=>shroomHouse(MOSS.x+p[0],MOSS.z+p[1],MOSS.h,i%2?B.capP:B.capR));
+  lamp(MOSS.x,MOSS.z+9,MOSS.h);sb(MOSS.x+1,MOSS.h,MOSS.z+9,B.flag);
   /* Pebble Bay — beach cabanas + boardwalk */
-  [[0,0],[-7,-2],[7,-3]].forEach(p=>hut(BAY.x+p[0],BAY.z+p[1],BAY.h,B.sand,B.roofB));
-  for(let z=BAY.z+3;z<=BAY.z+14;z++)for(let dx=-1;dx<=1;dx++)sb(BAY.x+dx,BAY.h-1,z,B.plank);
-  lamp(BAY.x+2,BAY.z+12,BAY.h);
+  [[0,0],[-11,-3],[11,-4]].forEach(p=>hut(BAY.x+p[0],BAY.z+p[1],BAY.h,B.sand,B.roofB));
+  for(let z=BAY.z+4;z<=BAY.z+18;z++)for(let dx=-1;dx<=1;dx++)sb(BAY.x+dx,BAY.h-1,z,B.plank);
+  lamp(BAY.x+2,BAY.z+16,BAY.h);
 }
 
 function genWorld(){genTerrain();genDecor();buildCity();buildCourse();buildGarden();buildMaker();buildTowns();}
 
 /* ---- NPCs of Hoptopia ---- */
 const NPC_DEFS=[
-  {id:'hopper',name:'Hopper the Guide',sp:'frog',x:CITY.x+1,z:CITY.z+23,r:3,
+  {id:'hopper',name:'Hopper the Guide',sp:'frog',x:CITY.x+1,z:CITY.z+35,r:3,
    lines:["Ribbit! Welcome to HOPTOPIA, traveler!",
      "Drag the LEFT side of the screen to hop around. Drag the RIGHT side to look!",
      "Tap plants, sticks and shells to scavenge them into your bag.",
      "This is Lilyopolis, our big city. Step on a glowing Arcade pad to play a game!"]},
-  {id:'mayor',name:'Mayor Croakins',sp:'toad',x:CITY.x+1,z:CITY.z-8,r:5,
+  {id:'mayor',name:'Mayor Croakins',sp:'toad',x:CITY.x+1,z:CITY.z-12,r:4,
    outfit:{hat:'hat_crown',neck:'none'},
    quest:{wear:true,coins:10,
      ask:"It's Fashion Week in Lilyopolis! Visit Madame Poppy's Boutique — pink roof, east of the fountain — and put something on. Show me your style!",
@@ -684,19 +711,19 @@ const NPC_DEFS=[
    lines:["Welcome to Lilyopolis, the greatest city on the pond!",
      "Every wall here is honest mud, driftwood and reed — critter-built!",
      "Explore the towns: Reedville in the swamp, Mosshollow in the forest, Pebble Bay on the shore."]},
-  {id:'poppy',name:'Madame Poppy',sp:'newt',x:CITY.x+14,z:CITY.z+12,r:3,
+  {id:'poppy',name:'Madame Poppy',sp:'newt',x:CITY.x+18,z:CITY.z+10,r:1.4,
    outfit:{hat:'crown_flower',neck:'neck_scarf'},shop:true,
    lines:["Welcome to my boutique, dearie! Hats, scarves, capes — all critter-crafted.",
      "The flower crown is FREE for first-time customers. Everything else costs a few coins."]},
-  {id:'pixel',name:'Pixel',sp:'tree',x:CITY.x-11,z:CITY.z+13,r:4,
+  {id:'pixel',name:'Pixel',sp:'tree',x:CITY.x-16,z:CITY.z+18,r:4,
    lines:["This is Arcade Plaza! Step on a glowing pad to play a game.",
      "BLUE pad: Lily Hop course. RED: Berry Scramble. YELLOW: Firefly Chase!",
      "Beat them to earn coins — then build YOUR OWN game on Maker Isle, far to the north-west!"]},
-  {id:'sheldon',name:'Sheldon',sp:'turtle',x:CITY.x+9,z:CITY.z+1,r:3,
+  {id:'sheldon',name:'Sheldon',sp:'turtle',x:CITY.x+14,z:CITY.z-1,r:3,
    trade:{item:'pebble',n:3,coins:2},
    lines:["Pssst. I collect smooth pebbles from the beach.",
      "Bring me 3 pebbles and I'll shine up 2 coins for you. Deal?"]},
-  {id:'lulu',name:'Lulu',sp:'frog',x:CITY.x-4,z:CITY.z+6,r:6,
+  {id:'lulu',name:'Lulu',sp:'frog',x:CITY.x-6,z:CITY.z+8,r:7,
    lines:["I hopped the whole Lily Hop course without falling in!","Betcha can't beat my splashless run!"]},
   {id:'tilly',name:'Tilly',sp:'newt',x:GARDEN.x,z:GARDEN.z+10,r:3,
    quest:{item:'berry',n:5,coins:10,ask:"My garden feeds half of Lilyopolis, but picking is hard work! Bring me 5 berries?",thanks:"Ooh, plump ones! Here — 10 coins, fresh from the market."},
@@ -1097,7 +1124,7 @@ function renderWorld(pv,cam,fwd,drawEnts){
 }
 /* ========== 5. player, NPCs, physics, camera, raycast ========== */
 const FOVY=65*Math.PI/180;
-const P={x:96.5,y:20,z:118.5,vx:0,vy:0,vz:0,yaw:Math.PI,onGround:false,inWater:false,moving:false,hw:0.28,hh:1.5};
+const P={x:CITY.x+0.5,y:20,z:CITY.z+34.5,vx:0,vy:0,vz:0,yaw:Math.PI,onGround:false,inWater:false,moving:false,hw:0.28,hh:1.5};
 const cam={yaw:0,pitch:0.38,dist:5.5};
 let CAMEYE=[0,0,0],CAMFWD=[0,0,-1];
 const NPCS=[],FLIES=[],COINSE=[],RESPAWN=[];
@@ -1160,8 +1187,18 @@ function playerJump(){
 
 function spawnNPCs(){
   for(const d of NPC_DEFS){
-    NPCS.push(Object.assign({},d,{hx:d.x+0.5,hz:d.z+0.5,x:d.x+0.5,z:d.z+0.5,
-      y:groundY(d.x,d.z),yaw:Math.PI,wt:Math.random()*3,tx:d.x+0.5,tz:d.z+0.5,
+    let bx=d.x,bz=d.z,by=groundY(d.x,d.z);
+    const za=zoneAt(d.x,d.z);
+    /* roofs are not homes: if the spawn column is raised by a building,
+       slide to the lowest walkable ground nearby */
+    if(za.zn&&by>za.zn.h+2){
+      for(let dx=-4;dx<=4;dx++)for(let dz=-4;dz<=4;dz++){
+        const gy=groundY(d.x+dx,d.z+dz);
+        if(gy>WL&&gy<by){by=gy;bx=d.x+dx;bz=d.z+dz;}
+      }
+    }
+    NPCS.push(Object.assign({},d,{hx:bx+0.5,hz:bz+0.5,x:bx+0.5,z:bz+0.5,
+      y:by,yaw:Math.PI,wt:Math.random()*3,tx:bx+0.5,tz:bz+0.5,
       moving:false,ph:Math.random()*7}));
   }
 }
@@ -1677,7 +1714,8 @@ function updateMini(dt){
       if(Math.abs(P.y-(p[2]+1))<1.6&&Math.hypot(P.x-(p[0]+1),P.z-(p[1]+1))<1.7)
         mini.cp=[p[0]+1,p[2]+1.2,p[1]+1];}
     if(P.inWater){sSplash();toast('Splash! Back to the checkpoint');teleport(mini.cp);}
-    if(Math.hypot(P.x-96.5,P.y-16,P.z-147.5)<2.4)endMini(true);
+    const F=MINI.hop.fin;
+    if(Math.hypot(P.x-F[0],P.y-F[1],P.z-F[2])<2.4)endMini(true);
   }else if(mini.id==='berry'){
     mini.tLeft-=dt;
     if(mini.tLeft<=0)endMini(false);
@@ -1796,7 +1834,7 @@ function plotStamp(m,x,z){
   burst(x+0.5,PLOT.g+0.7,z+0.5,10,'#ffffff',2,2,4.5,0.09);
 }
 function placeModel(md,x,z){
-  const m=md.id==='lodge'?6:(md.id==='shroomH'||md.id==='tower'?4:(md.id==='hut'?4:1));
+  const m=md.id==='lodge'?8:(md.id==='shroomH'?5:(md.id==='tower'?4:(md.id==='hut'?5:1)));
   if(x-m<PLOT.x0-1||x+m>PLOT.x1+1||z-m<PLOT.z0-1||z+m>PLOT.z1+1){toast('Build inside the plot!');return;}
   if(MP&&MP.role==='guest'){
     if(!MP.allowBuild){toast('Ask the host to turn on "Friends can build"!');return;}
