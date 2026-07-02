@@ -73,6 +73,7 @@ html,body{margin:0;height:100%;position:fixed;inset:0;overflow:hidden;background
 #wrapM{display:none;}
 #btnM{background:linear-gradient(160deg,#ff9a4d,#ef6b2a);}
 #btnM.on{outline:4px solid var(--sun);outline-offset:2px;}
+#btnSnap{background:linear-gradient(160deg,#b48cff,#6a2fb0);}
 
 /* ---- maker palette drawer ---- */
 #palette{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(14px + env(safe-area-inset-bottom));
@@ -237,6 +238,10 @@ html,body{margin:0;height:100%;position:fixed;inset:0;overflow:hidden;background
   <div id="shoppanel"></div>
   <div id="joy"><div id="joyn"></div></div>
   <div id="abtns">
+    <div class="actwrap" id="wrapSnap" style="display:none">
+      <button class="act" id="btnSnap" aria-label="Snap a photo"><svg viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2.5"/><circle cx="12" cy="13.5" r="4"/><path d="M9 7l1.5-2.5h3L15 7"/></svg></button>
+      <span class="alabel">SNAP</span>
+    </div>
     <div class="actwrap">
       <button class="act" id="btnA" aria-label="Hop"><svg viewBox="0 0 24 24"><path d="M12 19V6"/><path d="m5.5 12.5 6.5-7 6.5 7"/></svg></button>
       <span class="alabel">HOP</span>
@@ -262,6 +267,7 @@ html,body{margin:0;height:100%;position:fixed;inset:0;overflow:hidden;background
   </div>
   <div id="modal"><div class="card" id="modalCard"></div></div>
   <div id="toast"></div>
+  <div id="qflash" style="position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:40;"></div>
   <div id="pops"></div>
   <div id="loading">
     <svg class="frogload" viewBox="0 0 100 100"><circle cx="33" cy="27" r="15" fill="#8fdf5a"/><circle cx="67" cy="27" r="15" fill="#8fdf5a"/><path d="M50 24C73 24 87 41 87 62 87 83 70 93 50 93 30 93 13 83 13 62 13 41 27 24 50 24Z" fill="#8fdf5a"/><circle cx="33" cy="28" r="9" fill="#fff"/><circle cx="67" cy="28" r="9" fill="#fff"/><circle cx="35" cy="31" r="5" fill="#16242e"/><circle cx="65" cy="31" r="5" fill="#16242e"/><path d="M38 58Q50 70 62 58" fill="none" stroke="#2f6e18" stroke-width="4" stroke-linecap="round"/></svg>
@@ -282,11 +288,12 @@ const clamp=(v,a,b)=>v<a?a:v>b?b:v;
 const lerp=(a,b,t)=>a+(b-a)*t;
 const dist2=(ax,az,bx,bz)=>Math.hypot(ax-bx,az-bz);
 
-const HOP_BUILD='7.02e';
+const HOP_BUILD='7.02f';
 let GFXPOLY=false; /* 'Smooth' graphics prototype (low-poly terrain + flat colors) */
 const SAVE_KEY='hoptopia1';
 const DEF_SAVE={started:false,critter:'frog',mode:'',coins:0,inv:{},quests:{},best:{},plot:[],pos:null,sound:true,music:true,tut:false,outfit:{hat:'none',neck:'none'},wardrobe:{}};
 let SV=loadSave();
+SV.q2=SV.q2||{};SV.q2p=SV.q2p||{};
 GFXPOLY=SV.gfx?SV.gfx==='poly':true;
 if(new URLSearchParams(location.search).has('poly'))GFXPOLY=true;
 if(new URLSearchParams(location.search).has('blocky'))GFXPOLY=false;
@@ -474,9 +481,10 @@ const CITY={x:120,z:120,r:42,h:13},
       REED={x:64,z:196,r:16,h:12,g:B.mud},
       MOSS={x:196,z:56,r:17,h:15},
       BAY={x:204,z:204,r:16,h:12,g:B.sand},
+      COVE={x:204,z:219,r:11,h:8},
       POOL={x:120,z:176,r:13,h:8},
       GARDEN={x:172,z:96,r:12,h:13};
-const ZONES=[CITY,MAKER,REED,MOSS,BAY,POOL,GARDEN];
+const ZONES=[CITY,MAKER,REED,MOSS,BAY,COVE,POOL,GARDEN];
 const CLEAN=new Set([CITY,MAKER,POOL,GARDEN]);
 function zoneAt(x,z){let best=null,bt=0;
   for(const zn of ZONES){const d=Math.hypot(x-zn.x,z-zn.z);const t=clamp((zn.r-d)/7,0,1);
@@ -720,6 +728,7 @@ function buildArcade(ax,az,g){
   ARCADE.x=ax;ARCADE.z=az;ARCADE.g=g;
 }
 const ARCADE={x:0,z:0,g:0};
+const QBOARD={x:0,z:0,g:0};
 /* enclosed shops registered by builders (fixed-camera scenes) */
 
 function signPanel(cx,y0,cz,border,glyph){
@@ -780,6 +789,14 @@ function buildCity(){
   hs.forEach((p,i)=>hut(cx+p[0],cz+p[1],g,i%2?B.mud:B.plank,i%2?B.roofB:B.roofP));
   for(let i=-36;i<=36;i+=12){if(Math.abs(i)>6){lamp(cx+i,cz+3,g);lamp(cx+3,cz+i,g);}}
   buildArcade(cx-16,cz+13,g);
+  /* the Quest Board — a corkboard of things to do */
+  QBOARD.x=cx-9;QBOARD.z=cz+5;QBOARD.g=g;
+  clearAbove(cx-12,cz+4,cx-6,cz+6,g);
+  sb(cx-11,g,cz+5,B.wood);sb(cx-11,g+1,cz+5,B.wood);sb(cx-11,g+2,cz+5,B.wood);sb(cx-11,g+3,cz+5,B.wood);
+  sb(cx-7,g,cz+5,B.wood);sb(cx-7,g+1,cz+5,B.wood);sb(cx-7,g+2,cz+5,B.wood);sb(cx-7,g+3,cz+5,B.wood);
+  for(let X=cx-11;X<=cx-7;X++)for(let Y=g+1;Y<=g+3;Y++)sb(X,Y,cz+5,B.plank);
+  sb(cx-10,g+2,cz+5,B.padR);sb(cx-9,g+3,cz+5,B.padY);sb(cx-8,g+2,cz+5,B.padB);
+  sb(cx-9,g+1,cz+5,B.lantern);
   /* arcade sign on posts at the plaza entrance */
   sb(cx-19,g,cz+19,B.wood);sb(cx-19,g+1,cz+19,B.wood);sb(cx-19,g+2,cz+19,B.wood);sb(cx-19,g+3,cz+19,B.wood);
   sb(cx-13,g,cz+19,B.wood);sb(cx-13,g+1,cz+19,B.wood);sb(cx-13,g+2,cz+19,B.wood);sb(cx-13,g+3,cz+19,B.wood);
@@ -901,6 +918,10 @@ const NPC_DEFS=[
    lines:["Welcome to Pebble Bay! Best skipping stones on the whole pond."]},
   {id:'splash',name:'Splash',sp:'tree',x:BAY.x-6,z:BAY.z-2,r:5,
    lines:["CANNONBALL!!! …oh, hi. The water's great — hop in, you can swim!"]},
+  {id:'puddles',name:'Captain Puddles',sp:'toad',x:BAY.x,z:BAY.z+16,r:1.5,
+   outfit:{hat:'hat_straw',neck:'neck_scarf'},
+   lines:["Arr-ribbit! I sailed every puddle from here to the big bog.",
+     "Me great-great-grandfrog buried treasure somewhere on this pond…"]},
   {id:'mason',name:'Mason',sp:'beaver',x:MAKER.x,z:PLOT.z1+3,r:4,
    lines:["Welcome to Maker Isle! This whole plot is YOURS.",
      "Tap the orange hammer to open your model kit, then tap the ground to build.",
@@ -1668,6 +1689,10 @@ function drawCritter(e,t){
   if(sp.teeth)part(mT(0,1.1,0.23),0.12,0.1,0.03,'#ffffff');
   if(sp.shell)part(mT(0,0.76,-0.25),0.5,0.46,0.14,'#8a6a3a');
   if(sp.tail)part(mMul(mT(0,0.5,-0.3),mRX(0.6)),0.18,0.1,0.42,sp.dark);
+  if(e===P&&anyDeliveryActive()){
+    part(mT(0,0.96,-0.3),0.36,0.32,0.2,'#c9974d');
+    part(mT(0,0.96,-0.3),0.38,0.08,0.22,'#a8552f');
+  }
   /* outfits: hats + neck pieces from Madame Poppy's Boutique */
   const fit=e===P?((SHOP.active&&SHOP_PREV)?SHOP_PREV:SV.outfit):e.outfit;
   if(fit){
@@ -1906,6 +1931,7 @@ bindBtn($('#btnA'),()=>uiButtonA());
 bindBtn($('#btnB'),()=>uiButtonB());
 bindBtn($('#btnM'),()=>toggleMaker());
 bindBtn($('#btnPause'),()=>openPause());
+bindBtn($('#btnSnap'),()=>{if(!modalOpen&&!SHOP.active)doSnap();});
 bindBtn($('#btnInv'),()=>openInventory());
 function uiButtonA(){
   if(modalOpen||SHOP.active)return;
@@ -1956,6 +1982,16 @@ function collectAt(hit,sx,sy){
   sPick();
   burst(hit.x+0.5,hit.y+0.45,hit.z+0.5,8,'#ffe066',1.4,1.8,4,0.08);
   addItem(it,1,sx,sy);
+  /* morning-dew quest: flowers picked at sunrise count */
+  if(it==='flower'&&q2get('t2')===1){
+    const h=todNow();
+    if(h>=5.5&&h<=9.5){
+      SV.q2p.t2=(SV.q2p.t2||0)+1;
+      popLabel('+1 dewdrop','');
+      if(SV.q2p.t2>=4){SV.q2.t2=2;addCoins(10);sWin();toast('Dewdrops gathered! Elder Wart’s tea awaits.');}
+      save();updateHUD();
+    }else toast('No dew now — come back at sunrise!');
+  }
   if(wasBerryGame){mini.count++;updateHUD();
     if(mini.count>=MINI.berry.goal)endMini(true);}
   else RESPAWN.push({x:hit.x,y:hit.y,z:hit.z,b:hit.b,t:performance.now()+90000});
@@ -2004,6 +2040,18 @@ function buildLines(n){
       else ls.push({text:'Still hunting? I need '+(q.n-invCount(q.item))+' more '+IC(q.item)+' '+iname+'. You can do it!'});
     }else ls.push({text:'Thanks again, friend! The whole pond appreciates you.'});
   }
+  /* phase-1 quests: offers from givers, hand-offs at delivery targets */
+  for(const q of QDEFS){
+    const st=q2get(q.id);
+    if(q.giver===n.id){
+      if(q.type==='seek'){if(st!==1)ls.push({q2ask:q,text:q.ask});}
+      else if(st===0)ls.push({q2ask:q,text:q.ask});
+      else if(st===1&&q.type!=='deliver')ls.push({text:q.hint});
+      else if(st===1)ls.push({text:q.hint});
+    }
+    if(q.type==='deliver'&&q.target===n.id&&st===1)
+      ls.push({q2give:q,text:q.deliver});
+  }
   if(n.shop)ls.push({shop:true,text:'Want to browse the racks, dearie?'});
   if(n.trade){
     const tr=n.trade;
@@ -2027,22 +2075,36 @@ function showLine(){
   if(isObj){
     const n=dialog.npc;
     if(L.ask){dbtn('Sure, I will!',()=>{SV.quests[n.id]=1;save();toast('Quest started!');closeDialog();updateHUD();});
-      dbtn('Maybe later',closeDialog,true);}
+      dbtn('Maybe later',dialogSkip,true);}
     if(L.give){dbtn(n.quest.wear?'Ta-daa!':'Give '+n.quest.n+' '+IC(n.quest.item),()=>{
         if(!n.quest.wear)SV.inv[n.quest.item]-=n.quest.n;
         SV.quests[n.id]=2;save();
         addCoins(n.quest.coins);
         dialog.lines=[n.quest.thanks];dialog.i=0;showLine();});
-      dbtn('Not yet',closeDialog,true);}
+      dbtn('Not yet',dialogSkip,true);}
+    if(L.q2ask){dbtn('I’m on it!',()=>q2accept(L.q2ask));
+      dbtn('Maybe later',dialogSkip,true);}
+    if(L.q2give){dbtn('Here you go!',()=>{
+        const q=L.q2give;
+        const t0=SV.q2p[q.id+'_t']||0;
+        q2complete(q,q.timer?(Date.now()-t0)<q.timer*1000:false);
+      });
+      dbtn('Not yet',dialogSkip,true);}
     if(L.shop){dbtn('Browse the racks!',()=>{openShop();});
-      dbtn('Just looking',closeDialog,true);}
+      dbtn('Just looking',dialogSkip,true);}
     if(L.trade){dbtn('Trade!',()=>{
         SV.inv[n.trade.item]-=n.trade.n;save();addCoins(n.trade.coins);
         dialog.lines=buildLines(n);dialog.i=dialog.lines.length-1;
         if(typeof dialog.lines[dialog.i]!=='object'||!dialog.lines[dialog.i].trade){dialog.lines=['Pleasure doing business! Bring me more any time.'];dialog.i=0;}
         showLine();});
-      dbtn('No thanks',closeDialog,true);}
+      dbtn('No thanks',dialogSkip,true);}
   }
+}
+function dialogSkip(){ /* decline an offer but keep listening */
+  $('#dlgBtns').innerHTML='';
+  dialog.i++;
+  if(dialog.i>=dialog.lines.length)closeDialog();
+  else{sTalk();showLine();}
 }
 function dialogNext(){
   if($('#dlgBtns').children.length)return;
@@ -2158,7 +2220,12 @@ function updateHUD(){
     else if(mini.id==='firefly')txt='Fireflies '+mini.count+'/'+MINI.firefly.goal+' — '+Math.max(0,Math.ceil(mini.tLeft))+'s';
     else if(mini.id==='plot')txt='YOUR game! Coins '+mini.count+'/'+mini.total+' — reach the flag!';
   }else{
-    for(const n of NPCS){const q=n.quest;
+    for(const q of QDEFS){
+      if(q2get(q.id)!==1)continue;
+      txt=q.name+': '+q2status(q);
+      break;
+    }
+    if(!txt)for(const n of NPCS){const q=n.quest;
       if(q&&SV.quests[n.id]===1){
         txt=q.wear?'Wear something from Madame Poppy’s Boutique, then see the Mayor!'
           :n.name+' needs '+ITEMS[q.item].name.toLowerCase()+': '+Math.min(invCount(q.item),q.n)+'/'+q.n;
@@ -2175,6 +2242,14 @@ function updateBangs(){
       ?(SV.outfit.hat!=='none'||SV.outfit.neck!=='none')
       :invCount(n.quest.item)>=n.quest.n);
     n.bang=!!(n.quest&&(st===0||(st===1&&done)));
+    if(!n.bang)for(const q of QDEFS){
+      if(q.giver!==n.id)continue;
+      const s2=q2get(q.id);
+      if((q.type==='seek'&&s2!==1)||s2===0){n.bang=true;break;}
+      if(q.type==='deliver'&&q.target===n.id&&s2===1){n.bang=true;break;}
+    }
+    if(!n.bang)for(const q of QDEFS)
+      if(q.type==='deliver'&&q.target===n.id&&q2get(q.id)===1){n.bang=true;break;}
   }
 }
 
@@ -2504,12 +2579,15 @@ function gameTap(sx,sy){
   const n=npcAlongRay(dir,10);
   if(n){talkTo(n);return;}
   const hit=raycast(CAMEYE[0],CAMEYE[1],CAMEYE[2],dir[0],dir[1],dir[2],12);
+  if(hit&&QBOARD.x&&Math.abs(hit.x-QBOARD.x)<=3&&Math.abs(hit.z-QBOARD.z)<=1&&hit.y>=QBOARD.g&&hit.y<=QBOARD.g+4
+     &&Math.hypot(QBOARD.x+0.5-P.x,QBOARD.z+0.5-P.z)<10){openQuestBoard();return;}
   if(hit&&COLLECT[hit.b]){
     if(Math.hypot(hit.x+0.5-P.x,hit.z+0.5-P.z)<7)collectAt(hit,sx,sy);
     else toast('Hop closer!');
   }
 }
 function interactAction(){
+  if(QBOARD.x&&Math.hypot(QBOARD.x+0.5-P.x,QBOARD.z+0.5-P.z)<4){openQuestBoard();return;}
   const n=nearestNPC(3.4);
   if(n){talkTo(n);return;}
   const hit=raycast(CAMEYE[0],CAMEYE[1],CAMEYE[2],CAMFWD[0],CAMFWD[1],CAMFWD[2],10);
@@ -2652,6 +2730,7 @@ function boot(){
   if(SV.pos&&SV.started){P.x=SV.pos[0];P.y=SV.pos[1];P.z=SV.pos[2];}
   else P.y=groundY(P.x,P.z)+0.1;
   WORLD_READY=true;
+  if(SV.q2&&SV.q2.s1===1){SV.q2.s1=0;save();}
   updateHUD();
   $('#loading').style.display='none';
   showTitle();
@@ -2701,6 +2780,7 @@ function frame(now){
       spawnPart(px2,groundY(px2,pz2)+0.8+Math.random()*1.6,pz2,
         0.25,0.12,0.18,4+Math.random()*3,night?'#d8ff6e':'#fff6c0',night?0.08:0.05,0);}}
   updateParts(dt);
+  questTick(dt);
   abtnsEl.classList.toggle('dim',P.moving&&!modalOpen&&!dialog.npc);
   for(const n of NPCS)if(Math.hypot(n.x-P.x,n.z-P.z)<48)updateNPC(n,dt);
   updateBangs();
@@ -2723,6 +2803,11 @@ function frame(now){
     for(const r of REMOTES.values())drawCritter(r,t);
     for(const c2 of COINSE)if(!c2.got)drawCoinEnt(c2,t);
     for(const f of FLIES)if(!f.got)drawFly(f,t);
+    if(CHEST){
+      const bob=Math.sin(t*2.5)*0.06;
+      drawBox(mMul(mT(CHEST.x,CHEST.y+0.35+bob,CHEST.z),mMul(mRY(t*1.2),mS(0.55,0.4,0.4))),'#8a5a2c');
+      drawBox(mMul(mT(CHEST.x,CHEST.y+0.58+bob,CHEST.z),mMul(mRY(t*1.2),mS(0.58,0.14,0.44))),'#ffd23e');
+    }
     /* particles + lantern glow + blob shadows (soft, blended) */
     gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
     gl.depthMask(false);
@@ -3381,6 +3466,245 @@ function mpTick(dt,t,pv){
 bindBtn($('#btnSay'),mpEmoteBar);
 bindBtn($('#chipMP'),()=>mpPanel());
 
+/* ========== 12. Phase 1 quests: deliveries, photos, seek, clocks, daily, treasure ========== */
+const QDEFS=[
+ {id:'d1',type:'deliver',giver:'mayor',target:'wart',coins:8,name:'Festival Invitation',
+  ask:'Official pond business! Deliver this festival invitation to Elder Wart in Reedville, would you?',
+  hint:'Elder Wart is in Reedville — the stilt village in the swamp, south-west.',
+  deliver:'A letter from the Mayor? The Pond Festival! Oh, wonderful news!',
+  thanks:'Delivered with style! The Mayor chose well.'},
+ {id:'d2',type:'deliver',giver:'bramble',target:'shelly',coins:8,timer:150,bonus:5,name:'Soup Run',
+  ask:'My famous mushroom soup for Shelly — but it must arrive HOT! Rush it to Pebble Bay!',
+  hint:'Pebble Bay is far to the south-east. Hurry while the soup is hot for a bonus!',
+  deliver:'Mmm, Bramble’s soup! Still warm? You’re a treasure.',
+  thanks:'Soup delivered! Bramble will be pleased.'},
+ {id:'d3',type:'deliver',giver:'poppy',target:'fern',coins:8,name:'Hat Box Delivery',
+  ask:'A special order! Take this hat box to Fern in Mosshollow, and don’t squash the bow, dearie.',
+  hint:'Fern lives in Mosshollow, the mushroom village to the north-east.',
+  deliver:'My new hat! Ooh, Madame Poppy remembered the bow. Thank you!',
+  thanks:'Fern adores the hat. You have a courier’s legs, dearie!'},
+ {id:'d4',type:'deliver',giver:'sheldon',target:'mason',coins:8,name:'Pebble Parcel',
+  ask:'Business delivery! My finest pebbles for Mason on Maker Isle — builders pay top coin for these.',
+  hint:'Mason is on Maker Isle, far to the north-west.',
+  deliver:'Sheldon’s pebbles! Perfect gravel for my next build. Much obliged!',
+  thanks:'A deal well done. You’ve got trader spirit!'},
+ {id:'p1',type:'photo',giver:'pixel',coins:10,name:'Firefly Photo',
+  ask:'Night mission! Photograph a firefly after dark — get close to a twinkle and tap SNAP!',
+  hint:'Fireflies come out after dark in the meadows and forests. Get close, then SNAP!',
+  fail:'No firefly in frame! Find a green twinkle at night and get close.',
+  thanks:'WHAT a shot! That’s going on the arcade wall.'},
+ {id:'p2',type:'photo',giver:'lulu',coins:10,name:'Sunset Shot',
+  ask:'The sunset from the Lily Hop finish platform is THE prettiest view. Snap it for me at dusk!',
+  hint:'Be on the Lily Hop finish platform at sunset, then tap SNAP.',
+  fail:'Not quite — stand on the Lily Hop finish platform at sunset!',
+  thanks:'Ohhh it’s BEAUTIFUL. Best view on the pond, told ya!'},
+ {id:'p3',type:'photo',giver:'splash',coins:10,name:'Underwater Snap',
+  ask:'Dive challenge! Take a photo UNDERWATER at Pebble Bay. The bubbles look amazing!',
+  hint:'Swim underwater at Pebble Bay, then tap SNAP.',
+  fail:'You have to be swimming at Pebble Bay! Glub glub.',
+  thanks:'BUBBLES! Incredible. You’re an honorary fish now.'},
+ {id:'s1',type:'seek',giver:'lulu',coins:4,name:'Hide and Seek',
+  ask:'Let’s play hide and seek! Close your eyes and count to ten — then come find me in the city!',
+  hint:'Lulu is hiding somewhere in Lilyopolis. Look behind things!'},
+ {id:'t1',type:'fireflies',giver:'fern',coins:10,n:5,name:'Firefly Jar',
+  ask:'Would you gather 5 fireflies for my night lantern? They only come out after dark…',
+  hint:'After dark, walk up to green twinkles to gently jar them. 5 to go!',
+  thanks:'My lantern will glow so pretty tonight. Thank you!'},
+ {id:'t2',type:'dew',giver:'wart',coins:10,n:4,name:'Morning Dew',
+  ask:'Morning dew makes the finest tea. Pick 4 flowers at sunrise, while the dew still sits on them.',
+  hint:'Pick flowers between sunrise and mid-morning — the dew fades by then!',
+  thanks:'Ahh, perfect dew. Come by for tea some hundred floods from now.'},
+ {id:'h1',type:'hunt',giver:'puddles',coins:25,name:'Buried Treasure',
+  ask:'Me grandfrog’s treasure map! First clue: “Where the water dances and the towers watch.” Arr-ribbit!',
+  hint:'Follow the clues! The compass shows the search area.',
+  thanks:'BLISTERIN’ BARNACLES, ye found it! The pond’s finest treasure hunter!'},
+];
+const HUNT_STEPS=[
+ {x:CITY.x,z:CITY.z,r:7,clue:'A soggy note by the fountain: “Seek the TALLEST mushroom house!”'},
+ {x:MOSS.x,z:MOSS.z,r:9,clue:'A note under a mushroom: “Dig where the winner’s flag flies over water!”'},
+ {x:HOPX,z:HOPZ0+21,r:5,clue:null},
+];
+let CHEST=null;
+const SEEK_SPOTS=[[-22,-16],[-9,-24],[14,-23],[24,3],[20,17],[-14,20],[-25,6],[6,25]];
+function q2get(id){return SV.q2[id]||0;}
+function q2accept(q){
+  SV.q2[q.id]=1;SV.q2p[q.id]=0;
+  if(q.timer)SV.q2p[q.id+'_t']=Date.now();
+  if(q.type==='seek')hideLulu();
+  if(q.type==='hunt')SV.q2p.h1=0;
+  save();closeDialog();updateHUD();
+  sTalk();toast('Quest started!');
+}
+function q2complete(q,bonusOk){
+  SV.q2[q.id]=2;
+  let c=q.coins+((q.bonus&&bonusOk)?q.bonus:0);
+  addCoins(c);save();updateHUD();
+  if(dialog.npc){dialog.lines=[q.thanks||'Thank you!'];dialog.i=0;showLine();}
+}
+function hideLulu(){
+  const l=NPCS.find(n=>n.id==='lulu');if(!l)return;
+  const sp=SEEK_SPOTS[Math.floor(Math.random()*SEEK_SPOTS.length)];
+  l.x=CITY.x+sp[0]+0.5;l.z=CITY.z+sp[1]+0.5;
+  l.hx=l.x;l.hz=l.z;l.r=0.4;
+  l.y=walkGroundY(l.x,l.z);
+  toast('Lulu is hiding! Go find her!');
+}
+function luluHome(){
+  const l=NPCS.find(n=>n.id==='lulu');if(!l)return;
+  l.hx=CITY.x-6+0.5;l.hz=CITY.z+8+0.5;l.x=l.hx;l.z=l.hz;l.r=7;
+  l.y=walkGroundY(l.x,l.z);
+}
+function anyPhotoActive(){return ['p1','p2','p3'].some(id=>q2get(id)===1);}
+function anyDeliveryActive(){return ['d1','d2','d3','d4'].some(id=>q2get(id)===1);}
+function photoCheck(id){
+  const h=todNow();
+  if(id==='p1')return NIGHTA>0.35&&PARTS.some(p=>p.col==='#d8ff6e'&&Math.hypot(p.x-P.x,p.z-P.z)<9);
+  if(id==='p2'){const F=MINI.hop.fin;return h>=16.5&&h<=20.5&&Math.hypot(P.x-F[0],P.z-F[2])<4.5;}
+  if(id==='p3')return P.inWater&&Math.hypot(P.x-BAY.x,P.z-BAY.z)<26;
+  return false;
+}
+function doSnap(){
+  const f=$('#qflash');f.animate([{opacity:0},{opacity:.9},{opacity:0}],{duration:260});
+  blip(900,.05,'square',.2);
+  let hit=false;
+  for(const id of ['p1','p2','p3']){
+    if(q2get(id)!==1)continue;
+    const q=QDEFS.find(x=>x.id===id);
+    if(photoCheck(id)){
+      hit=true;SV.q2[id]=2;addCoins(q.coins);save();updateHUD();
+      sWin();toast('Perfect shot! Show '+(NPCS.find(n=>n.id===q.giver)||{name:'them'}).name+' any time.');
+    }
+  }
+  if(!hit){
+    const act=['p1','p2','p3'].find(id=>q2get(id)===1);
+    if(act)toast(QDEFS.find(x=>x.id===act).fail);
+  }
+}
+/* daily special: same order for everyone, rotates with the real date */
+const DAILY_ORDERS=[
+ {items:{berry:3,flower:2},coins:12},
+ {items:{shell:2,pebble:3},coins:12},
+ {items:{mushroom:2,stick:3},coins:12},
+ {items:{reed:4,flower:2},coins:12},
+ {items:{berry:2,shell:2,stick:2},coins:14},
+ {items:{mushroom:3,pebble:2},coins:13},
+];
+function dayKey(){const d=new Date();return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate();}
+function dailyOrder(){
+  const d=new Date();
+  const n=(d.getFullYear()*373+d.getMonth()*31+d.getDate())%DAILY_ORDERS.length;
+  return DAILY_ORDERS[n];
+}
+function dailyDone(){return SV.q2.daily===dayKey();}
+function dailyCanHandIn(){
+  const o=dailyOrder();
+  return Object.keys(o.items).every(k=>invCount(k)>=o.items[k]);
+}
+function handInDaily(){
+  const o=dailyOrder();
+  if(!dailyCanHandIn()){toast('Still gathering — check the list!');sBad();return;}
+  for(const k in o.items)SV.inv[k]-=o.items[k];
+  SV.q2.daily=dayKey();
+  addCoins(o.coins);save();sWin();
+  openQuestBoard();
+}
+/* per-frame quest logic */
+let QT=0;
+function questTick(dt){
+  QT-=dt;if(QT>0)return;QT=0.3;
+  const h=todNow();
+  /* hide & seek */
+  if(q2get('s1')===1){
+    const l=NPCS.find(n=>n.id==='lulu');
+    if(l&&Math.hypot(l.x-P.x,l.z-P.z)<3){
+      SV.q2.s1=0;SV.q2p.s1n=(SV.q2p.s1n||0)+1;
+      addCoins(4);save();sWin();
+      luluHome();
+      toast('You found Lulu! ('+SV.q2p.s1n+' wins)');
+      updateHUD();
+    }
+  }
+  /* firefly jar */
+  if(q2get('t1')===1&&NIGHTA>0.35){
+    for(let i=PARTS.length-1;i>=0;i--){
+      const p=PARTS[i];
+      if(p.col==='#d8ff6e'&&Math.hypot(p.x-P.x,p.z-P.z)<1.4&&Math.abs(p.y-P.y-1)<2){
+        PARTS.splice(i,1);
+        SV.q2p.t1=(SV.q2p.t1||0)+1;sPick();
+        popLabel('+1 firefly','');
+        if(SV.q2p.t1>=5){SV.q2[ 't1'.trim() ]=2;addCoins(10);sWin();toast('Firefly jar full! Fern will love these.');}
+        save();updateHUD();
+        break;
+      }
+    }
+  }
+  /* treasure hunt waypoints */
+  if(q2get('h1')===1){
+    const st=SV.q2p.h1||0;
+    if(st<HUNT_STEPS.length){
+      const w=HUNT_STEPS[st];
+      if(Math.hypot(P.x-w.x,P.z-w.z)<w.r){
+        if(w.clue){SV.q2p.h1=st+1;save();sTalk();toast(w.clue);updateHUD();}
+        else if(!CHEST){
+          CHEST={x:w.x+1.5,y:walkGroundY(w.x+1.5,w.z+1.5),z:w.z+1.5};
+          sPick();toast('Something glitters nearby…');
+        }
+      }
+    }
+    if(CHEST&&Math.hypot(CHEST.x-P.x,CHEST.z-P.z)<1.8){
+      burst(CHEST.x,CHEST.y+0.6,CHEST.z,16,'#ffd23e',2.4,2.6,5,0.1);
+      CHEST=null;
+      const q=QDEFS.find(x=>x.id==='h1');
+      SV.q2.h1=2;addCoins(q.coins);save();sWin();
+      toast('TREASURE! +'+q.coins+' coins! Tell Captain Puddles!');
+      updateHUD();
+    }
+  }
+  /* SNAP button visibility */
+  const ws=$('#wrapSnap');
+  if(ws)ws.style.display=anyPhotoActive()&&!SHOP.active?'flex':'none';
+}
+/* quest board UI */
+const QGLYPH={deliver:'→',photo:'◉',seek:'?',fireflies:'✦',dew:'❀',hunt:'✕',fetch:'✿',wear:'❖'};
+function q2status(q){
+  const st=q2get(q.id);
+  if(q.type==='seek')return st===1?'She’s hiding — find her!':'Ask Lulu to play! ('+(SV.q2p.s1n||0)+' wins)';
+  if(st===0)return 'See '+((NPCS.find(n=>n.id===q.giver)||{}).name||'?');
+  if(st===2)return 'Done ✓';
+  if(q.type==='deliver')return 'Deliver to '+((NPCS.find(n=>n.id===q.target)||{}).name||'?');
+  if(q.type==='photo')return 'SNAP the shot!';
+  if(q.type==='fireflies')return (SV.q2p.t1||0)+'/5 after dark';
+  if(q.type==='dew')return (SV.q2p.t2||0)+'/4 at sunrise';
+  if(q.type==='hunt')return 'Clue '+((SV.q2p.h1||0)+1)+' of 3';
+  return 'In progress';
+}
+function openQuestBoard(){
+  closeDialog();
+  const o=dailyOrder();
+  let daily='<div class="mprow" style="background:#fff6da"><span class="who"><b>Today’s Special</b> — ';
+  for(const k in o.items)daily+=IC(k)+'×'+o.items[k]+' ';
+  daily+='→ '+IC('coin')+o.coins+'</span>';
+  daily+=dailyDone()?'<b style="color:#2f8b22">Done ✓</b>'
+    :'<button class="shopb" id="dailyBtn" style="background:linear-gradient(160deg,#7dd13f,#4f9e23)">Hand in</button>';
+  daily+='</div>';
+  let rows='';
+  const legacy=[
+    ['tilly','Berry Basket','fetch'],['mallory','Reed Bundle','fetch'],
+    ['bramble','Mushroom Soup','fetch'],['shelly','Shell Collection','fetch'],
+    ['mayor','Fashion Week','wear']];
+  for(const [gid,nm,tp] of legacy){
+    const st=SV.quests[gid]||0;
+    const giver=NPCS.find(n=>n.id===gid);
+    rows+='<div class="mprow"><span class="who">'+QGLYPH[tp]+' <b>'+nm+'</b> — '+
+      (st===2?'Done ✓':st===1?'In progress':'See '+(giver?giver.name:'?'))+'</span></div>';
+  }
+  for(const q of QDEFS){
+    rows+='<div class="mprow"><span class="who">'+QGLYPH[q.type]+' <b>'+q.name+'</b> — '+q2status(q)+'</span></div>';
+  }
+  openModal('<h2>Quest Board</h2>'+daily+rows,[['Close','gray',closeModal]]);
+  const db=$('#dailyBtn');if(db)db.onclick=handInDaily;
+}
+
 /* ========== 11. compass + minimap ========== */
 const CMP={el:$('#compass'),ctx:null};
 CMP.el.width=860;CMP.el.height=80;CMP.ctx=CMP.el.getContext('2d');
@@ -3444,6 +3768,22 @@ function questTargets(){
     else{const a=QUEST_AREAS[n.quest.item];
       if(a)t.push({x:a[0],z:a[1],k:'area',icon:n.quest.item});
       else t.push({x:n.x,z:n.z,k:'goal'});}
+  }
+  for(const q of QDEFS){
+    if(q2get(q.id)!==1)continue;
+    anyActive=true;
+    if(q.type==='deliver'){
+      const tn=NPCS.find(n=>n.id===q.target);
+      if(tn)t.push({x:tn.x,z:tn.z,k:'goal'});
+    }else if(q.id==='p2'){t.push({x:MINI.hop.fin[0],z:MINI.hop.fin[2],k:'area'});}
+    else if(q.id==='p3'){t.push({x:BAY.x,z:BAY.z+6,k:'area'});}
+    else if(q.type==='seek'){t.push({x:CITY.x,z:CITY.z,k:'area'});}
+    else if(q.type==='dew'){t.push({x:GARDEN.x,z:GARDEN.z,k:'area',icon:'flower'});}
+    else if(q.type==='hunt'){
+      const st=SV.q2p.h1||0;
+      const w=HUNT_STEPS[Math.min(st,HUNT_STEPS.length-1)];
+      t.push({x:w.x,z:w.z,k:'area'});
+    }
   }
   if(!anyActive){ /* nothing accepted: nudge toward the nearest "!" critter */
     let best=null,bd=1e9;
