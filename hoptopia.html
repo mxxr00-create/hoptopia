@@ -282,10 +282,12 @@ const clamp=(v,a,b)=>v<a?a:v>b?b:v;
 const lerp=(a,b,t)=>a+(b-a)*t;
 const dist2=(ax,az,bx,bz)=>Math.hypot(ax-bx,az-bz);
 
-const HOP_BUILD='7.02b';
+const HOP_BUILD='7.02c';
+let GFXPOLY=false; /* 'Smooth' graphics prototype (low-poly terrain + flat colors) */
 const SAVE_KEY='hoptopia1';
 const DEF_SAVE={started:false,critter:'frog',mode:'',coins:0,inv:{},quests:{},best:{},plot:[],pos:null,sound:true,music:true,tut:false,outfit:{hat:'none',neck:'none'},wardrobe:{}};
 let SV=loadSave();
+GFXPOLY=SV.gfx==='poly'||new URLSearchParams(location.search).has('poly');
 SV.outfit=SV.outfit||{hat:'none',neck:'none'};
 SV.wardrobe=SV.wardrobe||{};
 if(SV.music===undefined)SV.music=true;
@@ -915,6 +917,40 @@ gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);
 gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
 gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
 gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+/* "Smooth" style: a second texture where every tile is its average color
+   (alpha silhouettes preserved for plants), softly shaded, linear-filtered */
+const palTex=gl.createTexture();
+(function(){
+  const c=document.createElement('canvas');c.width=c.height=256;
+  const g2=c.getContext('2d');
+  for(let t=1;t<=40;t++){
+    const tx=(t&15)*16,ty=(t>>4)*16;
+    const d=ac.getImageData(tx,ty,16,16);
+    let r=0,gg=0,b=0,n=0;
+    for(let i=0;i<d.data.length;i+=4)if(d.data[i+3]>40){r+=d.data[i];gg+=d.data[i+1];b+=d.data[i+2];n++;}
+    if(!n)continue;
+    r=(r/n)|0;gg=(gg/n)|0;b=(b/n)|0;
+    const out=g2.createImageData(16,16);
+    for(let i=0;i<d.data.length;i+=4){
+      const on=d.data[i+3]>40;
+      out.data[i]=r;out.data[i+1]=gg;out.data[i+2]=b;out.data[i+3]=on?255:0;
+    }
+    g2.putImageData(out,tx,ty);
+  }
+  /* gentle top-light band per tile, only over opaque pixels */
+  g2.globalCompositeOperation='source-atop';
+  for(let t=1;t<=40;t++){
+    const tx=(t&15)*16,ty=(t>>4)*16;
+    g2.fillStyle='rgba(255,255,255,0.07)';g2.fillRect(tx,ty,16,5);
+    g2.fillStyle='rgba(0,20,40,0.07)';g2.fillRect(tx,ty+11,16,5);
+  }
+  gl.bindTexture(gl.TEXTURE_2D,palTex);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,c);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+})();
 gl.enable(gl.DEPTH_TEST);
 gl.clearColor(0.62,0.824,0.949,1);
 const FOG=[0.62,0.824,0.949],FOGD=[80,126],VIEW_DIST=136;
@@ -990,11 +1026,62 @@ function aoFace(F,x,y,z){
   return ls;
 }
 
+/* "Smooth" prototype: natural ground renders as a continuous flat-shaded
+   low-poly sheet (corner-averaged heights, per-face sun lighting) while
+   structures, plants and water keep their shapes in flat colors. */
+const NATURAL=new Set([B.grass,B.dirt,B.sand,B.stone,B.mud]);
+const SUNV=[0.42,0.75,0.33];
+{const l=Math.hypot(SUNV[0],SUNV[1],SUNV[2]);SUNV[0]/=l;SUNV[1]/=l;SUNV[2]/=l;}
+function natTopAt(x,z){
+  if(x<0||z<0||x>=W||z>=D)return -1;
+  const base=colI(x,z);
+  for(let y=H-1;y>=1;y--){
+    const b=world[base+y];
+    if(b===B.air||CROSS.has(b))continue;
+    if(b===B.water)return -1;
+    if(NATURAL.has(b)){const h=y+1;return h-1<=WL?-1:h;}
+    return -1;
+  }
+  return -1;
+}
+function pushTri(arr,a,b2,c,t,l){
+  const uv=quadUV(t),u=(uv[0]+uv[2])/2,v=(uv[1]+uv[3])/2;
+  arr.push(a[0],a[1],a[2],u,v,l,0, b2[0],b2[1],b2[2],u,v,l,0, c[0],c[1],c[2],u,v,l,0);
+}
+function triLight(a,b2,c,jit){
+  const ux=b2[0]-a[0],uy=b2[1]-a[1],uz=b2[2]-a[2];
+  const vx=c[0]-a[0],vy=c[1]-a[1],vz=c[2]-a[2];
+  let nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx;
+  if(ny<0){nx=-nx;ny=-ny;nz=-nz;}
+  const l2=Math.hypot(nx,ny,nz)||1;
+  return clamp(0.58+0.5*Math.max(0,(nx*SUNV[0]+ny*SUNV[1]+nz*SUNV[2])/l2)+jit,0.35,1.12);
+}
 function buildChunk(ci,cj){
   const arr=[],war=[];
   const x0=ci*16,z0=cj*16;
+  const EFF=new Map(),NTC=new Map();
+  const nt=(X,Z)=>{const k=X*1024+Z;let v=NTC.get(k);
+    if(v===undefined){v=natTopAt(X,Z);NTC.set(k,v);}return v;};
+  const eff=(X,Z)=>{const k=X*1024+Z;let v=EFF.get(k);
+    if(v===undefined){const n=nt(X,Z);v=n>0?n:groundY(X,Z);EFF.set(k,v);}return v;};
   for(let x=x0;x<x0+16;x++)for(let z=z0;z<z0+16;z++){
     const base=colI(x,z);
+    let hn=-1,cc=0;
+    if(GFXPOLY){
+      hn=nt(x,z);
+      if(hn>0){
+        const c00=(eff(x-1,z-1)+eff(x,z-1)+eff(x-1,z)+eff(x,z))/4;
+        const c10=(eff(x,z-1)+eff(x+1,z-1)+eff(x,z)+eff(x+1,z))/4;
+        const c01=(eff(x-1,z)+eff(x,z)+eff(x-1,z+1)+eff(x,z+1))/4;
+        const c11=(eff(x,z)+eff(x+1,z)+eff(x,z+1)+eff(x+1,z+1))/4;
+        cc=(c00+c10+c01+c11)/4;
+        const t=tileFor(world[base+hn-1],0);
+        const jit=(hash2(x*3+7,z*5+1)-0.5)*0.08;
+        const A=[x,c00,z],Bv=[x+1,c10,z],Cv=[x+1,c11,z+1],Dv=[x,c01,z+1];
+        pushTri(arr,A,Bv,Cv,t,triLight(A,Bv,Cv,jit));
+        pushTri(arr,A,Cv,Dv,t,triLight(A,Cv,Dv,-jit));
+      }
+    }
     for(let y=0;y<H;y++){
       const b=world[base+y];if(b===0)continue;
       if(b===B.water){
@@ -1014,8 +1101,15 @@ function buildChunk(ci,cj){
             pushQuad(war,c,T.water,[F.l,F.l,F.l,F.l],F.v.map(v=>v[1]?2:0));}}
         continue;
       }
-      if(CROSS.has(b)){pushCross(arr,x,y,z,tileFor(b,1),SWAY.has(b));continue;}
+      if(CROSS.has(b)){
+        /* plants ride the smoothed ground so they don't float or sink */
+        const py=(GFXPOLY&&hn>0&&y===hn)?cc:y;
+        pushCross(arr,x,py,z,tileFor(b,1),SWAY.has(b));continue;}
       for(const F of FACES){
+        if(GFXPOLY&&hn>0){
+          if(F.n[1]===1&&y===hn-1)continue;              /* sheet replaces the top */
+          if(F.n[1]===0&&nt(x+F.n[0],z+F.n[2])>0)continue; /* sheet drapes over natural-natural steps */
+        }
         const nb=gb(x+F.n[0],y+F.n[1],z+F.n[2]);
         if(SOLID.has(nb))continue;
         const c=F.v.map(v=>[x+v[0],y+v[1],z+v[2]]);
@@ -1193,7 +1287,7 @@ function renderWorld(pv,cam,fwd,drawEnts){
   beginEnts(pv,cam);
   drawSky(cam);
   gl.useProgram(PT.p);
-  gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,tex);gl.uniform1i(PT.uTex,0);
+  gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,GFXPOLY?palTex:tex);gl.uniform1i(PT.uTex,0);
   gl.uniformMatrix4fv(PT.uMVP,false,pv);
   gl.uniform3f(PT.uCam,cam[0],cam[1],cam[2]);
   gl.uniform3f(PT.uFog,FOG[0],FOG[1],FOG[2]);
@@ -2234,6 +2328,12 @@ function openPause(){
      [SV.sound?'Sound: ON':'Sound: OFF','purple',()=>{SV.sound=!SV.sound;save();closeModal();openPause();}],
      [SV.music?'Music: ON':'Music: OFF','purple',()=>{SV.music=!SV.music;save();
         if(SV.music)musStart();else musStop();closeModal();openPause();}],
+     [GFXPOLY?'Graphics: Smooth (new!)':'Graphics: Blocky','purple',()=>{
+        GFXPOLY=!GFXPOLY;SV.gfx=GFXPOLY?'poly':'';save();closeModal();
+        $('#loading .t').textContent='Repainting the pond…';
+        $('#loading').style.display='flex';
+        setTimeout(()=>{buildAllChunks();$('#loading').style.display='none';
+          toast(GFXPOLY?'Smooth graphics ON':'Classic blocky graphics');},60);}],
      [SV.mode==='maker'?'Maker Mode: ON':'Maker Mode: OFF','purple',()=>{
         SV.mode=SV.mode==='maker'?'explore':'maker';save();applyMode();closeModal();
         toast(SV.mode==='maker'?'Maker Mode ON — visit Maker Isle!':'Maker Mode off');openPause();}],
