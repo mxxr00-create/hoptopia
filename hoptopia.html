@@ -142,6 +142,23 @@ html,body{margin:0;height:100%;position:fixed;inset:0;overflow:hidden;background
 .modecard.maker{background:linear-gradient(160deg,#ff9a4d,#d63b86);}
 .modecard svg{width:44px;height:44px;fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
 
+/* ---- boutique: mannequin + item cards ---- */
+.shopwrap{display:flex;gap:12px;align-items:flex-start;margin-top:8px;}
+.manq{flex:none;width:134px;background:linear-gradient(180deg,#fff6e6,#f0dfc0);border-radius:14px;
+  padding:8px 4px 6px;box-shadow:0 3px 8px rgba(0,40,70,.15);}
+.manq svg{width:112px;height:142px;}
+.manq p{margin:2px 0 0;font-size:10.5px;}
+.shopgrid{flex:1;display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+.shopcard{background:#fff;border-radius:12px;padding:6px 4px 5px;cursor:pointer;
+  border:3px solid transparent;box-shadow:0 3px 8px rgba(0,40,70,.12);}
+.shopcard.sel{border-color:var(--sun);background:#fffbe8;}
+.shopcard svg{width:100%;height:46px;}
+.shopname{font-weight:800;font-size:10.5px;color:var(--ink);line-height:1.1;}
+.shopprice{font-weight:900;font-size:10px;color:#b06a00;margin-top:2px;min-height:12px;}
+.shopprice img{width:11px;height:11px;vertical-align:-2px;image-rendering:pixelated;}
+.shopprice .worn{color:#2f8b22;}
+.dic{width:1.15em;height:1.15em;vertical-align:-0.22em;image-rendering:pixelated;}
+
 /* ---- toast + point pops ---- */
 #toast{position:absolute;left:50%;top:16%;transform:translateX(-50%) translateY(-8px);z-index:30;
   background:rgba(20,40,60,.92);color:#fff;font-weight:800;padding:.55em 1.2em;border-radius:1.4em;
@@ -557,6 +574,36 @@ function stall(cx,cz,g){
   for(let x=cx-1;x<=cx+1;x++)sb(x,g,cz,B.plank);
   sb(cx-2,g,cz,B.wood);sb(cx+2,g,cz,B.wood);sb(cx-2,g+1,cz,B.wood);sb(cx+2,g+1,cz,B.wood);
   for(let x=cx-2;x<=cx+2;x++)for(let z=cz-1;z<=cz+1;z++)sb(x,g+2,z,(x+z)%2?B.roofP:B.roofB);
+}
+
+/* ---- boutique preview art: accessories on a wooden mannequin ---- */
+function accHatSVG(id){switch(id){
+  case 'crown_flower':return '<g><circle cx="38" cy="12" r="7" fill="#f25c97"/><circle cx="52" cy="9" r="7" fill="#ffd23e"/><circle cx="64" cy="13" r="7" fill="#ff9cbd"/><circle cx="38" cy="12" r="2.5" fill="#ffd23e"/><circle cx="52" cy="9" r="2.5" fill="#e07818"/><circle cx="64" cy="13" r="2.5" fill="#ffd23e"/></g>';
+  case 'hat_lily':return '<g><ellipse cx="50" cy="14" rx="30" ry="9" fill="#4aa832" stroke="#2f7d1e" stroke-width="2"/><circle cx="62" cy="9" r="6.5" fill="#f25c97"/><circle cx="62" cy="9" r="2.4" fill="#ffd23e"/></g>';
+  case 'hat_straw':return '<g><ellipse cx="50" cy="16" rx="34" ry="9" fill="#e8cd7a" stroke="#c9a852" stroke-width="2"/><ellipse cx="50" cy="8" rx="17" ry="9" fill="#d9b95c"/><rect x="33" y="12" width="34" height="4" rx="2" fill="#b03a5e"/></g>';
+  case 'hat_acorn':return '<g><path d="M28 16 Q28 2 50 2 Q72 2 72 16 Q60 12 50 12 Q40 12 28 16Z" fill="#8a5a2c" stroke="#6f451f" stroke-width="2"/><rect x="47" y="0" width="5" height="7" rx="2" fill="#6f451f"/></g>';
+  case 'hat_crown':return '<g><path d="M34 20 L34 6 L42 13 L50 4 L58 13 L66 6 L66 20Z" fill="#ffd23e" stroke="#d9a81c" stroke-width="2"/><circle cx="50" cy="15" r="3.4" fill="#ff6f61"/></g>';
+  case 'hat_shroom':return '<g><ellipse cx="50" cy="11" rx="27" ry="11" fill="#e04848" stroke="#b03030" stroke-width="2"/><circle cx="40" cy="8" r="3.5" fill="#fff"/><circle cx="58" cy="12" r="3" fill="#fff"/><circle cx="50" cy="5" r="2.5" fill="#fff"/></g>';
+}return '';}
+function accNeckSVG(id){switch(id){
+  case 'neck_scarf':return '<g><rect x="30" y="49" width="40" height="10" rx="5" fill="#e04848"/><rect x="56" y="55" width="9" height="18" rx="4" fill="#e04848"/><rect x="56" y="66" width="9" height="3" fill="#b03030"/></g>';
+  case 'neck_shell':return '<g><path d="M34 52 Q50 62 66 52" fill="none" stroke="#d9b95c" stroke-width="2.5"/><ellipse cx="50" cy="61" rx="6" ry="7" fill="#ffb9cf" stroke="#e06a94" stroke-width="1.5"/><path d="M50 55 V66 M45 57 L55 64 M55 57 L45 64" stroke="#e06a94" stroke-width="1"/></g>';
+}return '';}
+function accCapeSVG(id){return id==='neck_leaf'
+  ?'<path d="M20 52 Q14 90 24 96 L76 96 Q86 90 80 52 Q65 44 50 44 Q35 44 20 52Z" fill="#4aa832" stroke="#2f7d1e" stroke-width="2"/><path d="M50 48 V92" stroke="#2f7d1e" stroke-width="1.5" opacity=".5"/>'
+  :'';}
+function mannequinSVG(hat,neck,vb){
+  return '<svg viewBox="'+(vb||'0 0 100 126')+'">'
+    +'<rect x="47" y="90" width="6" height="26" fill="#8a5a2c"/>'
+    +'<ellipse cx="50" cy="117" rx="20" ry="6" fill="#a8743a"/>'
+    +accCapeSVG(neck)
+    +'<circle cx="33" cy="27" r="15" fill="#dbbb8e"/><circle cx="67" cy="27" r="15" fill="#dbbb8e"/>'
+    +'<path d="M50 24C73 24 87 41 87 62 87 83 70 93 50 93 30 93 13 83 13 62 13 41 27 24 50 24Z" fill="#dbbb8e"/>'
+    +'<ellipse cx="50" cy="68" rx="23" ry="17" fill="#ecd9b4"/>'
+    +'<circle cx="33" cy="28" r="6" fill="#cfae7d"/><circle cx="67" cy="28" r="6" fill="#cfae7d"/>'
+    +'<path d="M50 32 V88" stroke="#cfae7d" stroke-width="1.5"/>'
+    +accNeckSVG(neck)+accHatSVG(hat)
+    +'</svg>';
 }
 
 /* ---- Madame Poppy's boutique catalogue ---- */
@@ -1490,6 +1537,7 @@ function openModal(html,btns){
   $('#modal').style.display='flex';
 }
 function closeModal(){modalOpen=false;$('#modal').style.display='none';
+  SHOP_PREV=null;
   setTimeout(()=>{if(typeof mpMaybeShowKnock==='function')mpMaybeShowKnock();},60);}
 
 /* ---- inventory + pickups ---- */
@@ -1560,34 +1608,35 @@ function buildLines(n){
     const q=n.quest,iname=ITEMS[q.item].name.toLowerCase();
     if(st===0)ls.push({ask:true,text:q.ask});
     else if(st===1){
-      if(invCount(q.item)>=q.n)ls.push({give:true,text:'You have '+invCount(q.item)+' '+iname+'! Hand over '+q.n+' of them?'});
-      else ls.push({text:'Still hunting? I need '+(q.n-invCount(q.item))+' more '+iname+'. You can do it!'});
+      if(invCount(q.item)>=q.n)ls.push({give:true,text:'You have '+invCount(q.item)+' '+IC(q.item)+' '+iname+'! Hand over '+q.n+' of them?'});
+      else ls.push({text:'Still hunting? I need '+(q.n-invCount(q.item))+' more '+IC(q.item)+' '+iname+'. You can do it!'});
     }else ls.push({text:'Thanks again, friend! The whole pond appreciates you.'});
   }
   if(n.shop)ls.push({shop:true,text:'Want to browse the racks, dearie?'});
   if(n.trade){
     const tr=n.trade;
-    if(invCount(tr.item)>=tr.n)ls.push({trade:true,text:'Trade '+tr.n+' '+ITEMS[tr.item].name.toLowerCase()+' for '+tr.coins+' coins?'});
+    if(invCount(tr.item)>=tr.n)ls.push({trade:true,text:'Trade '+tr.n+' '+IC(tr.item)+' '+ITEMS[tr.item].name.toLowerCase()+' for '+tr.coins+' '+IC('coin')+' coins?'});
   }
   return ls;
 }
+const IC=k=>ICONS[k]?'<img class="dic" src="'+ICONS[k]+'">':'';
 function dbtn(label,fn,alt){
   const b=document.createElement('button');b.className='dbtn'+(alt?' alt':'');
-  b.textContent=label;
+  b.innerHTML=label;
   b.onclick=e=>{e.stopPropagation();fn();};
   $('#dlgBtns').appendChild(b);
 }
 function showLine(){
   const L=dialog.lines[dialog.i];
   const isObj=typeof L!=='string';
-  $('#dlgText').textContent=isObj?L.text:L;
+  $('#dlgText').innerHTML=isObj?L.text:L;
   $('#dlgBtns').innerHTML='';
   $('#dlgMore').style.display=(dialog.i<dialog.lines.length-1&&!isObj)?'block':'none';
   if(isObj){
     const n=dialog.npc;
     if(L.ask){dbtn('Sure, I will!',()=>{SV.quests[n.id]=1;save();toast('Quest started!');closeDialog();updateHUD();});
       dbtn('Maybe later',closeDialog,true);}
-    if(L.give){dbtn(n.quest.wear?'Ta-daa!':'Give '+n.quest.n,()=>{
+    if(L.give){dbtn(n.quest.wear?'Ta-daa!':'Give '+n.quest.n+' '+IC(n.quest.item),()=>{
         if(!n.quest.wear)SV.inv[n.quest.item]-=n.quest.n;
         SV.quests[n.id]=2;save();
         addCoins(n.quest.coins);
@@ -1611,34 +1660,60 @@ function dialogNext(){
 }
 function closeDialog(){dialog.npc=null;dlgEl.style.display='none';}
 
-/* ---- Madame Poppy's shop ---- */
+/* ---- Madame Poppy's shop: dress the mannequin, then buy the look ---- */
+let SHOP_PREV=null;
 function openShop(){
   closeDialog();
-  let rows='';
+  if(!SHOP_PREV)SHOP_PREV={hat:SV.outfit.hat,neck:SV.outfit.neck};
+  const pv=SHOP_PREV;
+  let cards='';
   for(const it of SHOP_ITEMS){
     const owned=SV.wardrobe[it.id]||it.cost===0;
     const worn=SV.outfit[it.slot]===it.id;
-    rows+='<div class="mprow"><span class="who">'+it.name+
-      (it.desc?' <span style="opacity:.6">('+it.desc+')</span>':(it.cost&&!owned?' · '+it.cost+' coins':''))+
-      '</span><button class="shopb" data-id="'+it.id+'" style="background:'+
-      (worn?'linear-gradient(160deg,#b6c3d0,#8295a4)':'linear-gradient(160deg,#7dd13f,#4f9e23)')+'">'+
-      (worn?'Take off':owned?'Wear':'Buy')+'</button></div>';
+    const sel=pv[it.slot]===it.id;
+    const vb=it.slot==='hat'?'6 0 88 52':'6 34 88 62';
+    cards+='<div class="shopcard'+(sel?' sel':'')+'" data-id="'+it.id+'">'
+      +mannequinSVG(it.slot==='hat'?it.id:'none',it.slot==='neck'?it.id:'none',vb)
+      +'<div class="shopname">'+it.name+'</div>'
+      +'<div class="shopprice">'+(worn?'<span class="worn">wearing ✓</span>'
+        :owned?'owned':'<img src="'+ICONS.coin+'"> '+it.cost)+'</div>'
+      +'</div>';
   }
-  openModal('<h2>Madame Poppy’s Boutique</h2>'+
-    '<p><img src="'+ICONS.coin+'" style="width:18px;vertical-align:-3px"> '+SV.coins+' coins</p>'+rows,
-    [['Done','gray',closeModal]]);
-  document.querySelectorAll('.shopb').forEach(b=>{
-    b.onclick=()=>{
-      const it=SHOP_ITEMS.find(x=>x.id===b.dataset.id);
-      const owned=SV.wardrobe[it.id]||it.cost===0;
-      if(!owned){
-        if(SV.coins<it.cost){toast('Not enough coins yet — try the Arcade!');sBad();return;}
-        SV.coins-=it.cost;SV.wardrobe[it.id]=1;sCoin();toast(it.name+' is yours!');
-      }
-      SV.outfit[it.slot]=(SV.outfit[it.slot]===it.id)?'none':it.id;
-      save();updateHUD();sTalk();
-      mpSendFit();
-      openShop();
+  let cost=0;
+  for(const slot of ['hat','neck']){
+    const id=pv[slot];
+    if(id!=='none'&&!SV.wardrobe[id]){
+      const it=SHOP_ITEMS.find(x=>x.id===id);
+      if(it&&it.cost>0)cost+=it.cost;
+    }
+  }
+  const differs=pv.hat!==SV.outfit.hat||pv.neck!==SV.outfit.neck;
+  const btns=[];
+  if(differs)btns.push([cost>0?'Buy & wear · '+cost+' coins':'Wear it!','',()=>{
+    if(SV.coins<cost){toast('Not enough coins yet — try the Arcade!');sBad();return;}
+    SV.coins-=cost;
+    for(const slot of ['hat','neck']){
+      const id=pv[slot];
+      if(id!=='none')SV.wardrobe[id]=1;
+    }
+    SV.outfit={hat:pv.hat,neck:pv.neck};
+    save();updateHUD();if(cost>0)sCoin();else sTalk();
+    toast('Looking fabulous!');
+    mpSendFit();
+    openShop();
+  }]);
+  btns.push(['Done','gray',()=>{SHOP_PREV=null;closeModal();}]);
+  openModal('<h2>Madame Poppy’s Boutique</h2>'
+    +'<p style="margin:-2px 0 0"><img src="'+ICONS.coin+'" style="width:18px;vertical-align:-3px"> '+SV.coins+' coins</p>'
+    +'<div class="shopwrap">'
+    +'<div class="manq">'+mannequinSVG(pv.hat,pv.neck)
+    +'<p class="dim">tap the racks to dress the mannequin!</p></div>'
+    +'<div class="shopgrid">'+cards+'</div></div>',btns);
+  document.querySelectorAll('.shopcard').forEach(el=>{
+    el.onclick=()=>{
+      const it=SHOP_ITEMS.find(x=>x.id===el.dataset.id);
+      pv[it.slot]=pv[it.slot]===it.id?'none':it.id;
+      sTalk();openShop();
     };});
 }
 
