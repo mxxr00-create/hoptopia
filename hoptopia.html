@@ -45,9 +45,10 @@ html,body{margin:0;height:100%;position:fixed;inset:0;overflow:hidden;background
 #joyn{position:absolute;width:54px;height:54px;border-radius:50%;left:33px;top:33px;
   background:radial-gradient(circle at 35% 30%,#fff,#cfe9f8);box-shadow:0 3px 8px rgba(0,40,80,.35);}
 
-/* ---- action buttons ---- */
-#abtns{position:absolute;right:calc(14px + env(safe-area-inset-right));bottom:calc(14px + env(safe-area-inset-bottom));
-  display:flex;align-items:flex-end;gap:12px;z-index:5;}
+/* ---- action buttons: HOP dead-center on the right edge, others below ---- */
+#abtns{position:absolute;right:calc(10px + env(safe-area-inset-right));top:50%;
+  transform:translateY(-43px); /* HOP's center sits at the exact vertical middle */
+  display:flex;flex-direction:column;align-items:center;gap:10px;z-index:5;}
 .actwrap{display:flex;flex-direction:column;align-items:center;gap:4px;pointer-events:none;}
 .act{width:62px;height:62px;border-radius:50%;border:none;font-weight:900;color:#fff;cursor:pointer;
   box-shadow:0 5px 0 rgba(0,0,0,.25),inset 0 2px 0 rgba(255,255,255,.35);
@@ -65,7 +66,7 @@ html,body{margin:0;height:100%;position:fixed;inset:0;overflow:hidden;background
 #btnM.on{outline:4px solid var(--sun);outline-offset:2px;}
 
 /* ---- maker palette drawer ---- */
-#palette{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(112px + env(safe-area-inset-bottom));
+#palette{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(14px + env(safe-area-inset-bottom));
   display:none;gap:8px;max-width:min(94%,700px);overflow-x:auto;padding:9px;z-index:6;
   background:rgba(16,45,75,.62);border-radius:16px;pointer-events:auto;backdrop-filter:blur(3px);}
 #palette::-webkit-scrollbar{height:0;}
@@ -147,7 +148,7 @@ html,body{margin:0;height:100%;position:fixed;inset:0;overflow:hidden;background
   font-weight:800;font-size:12px;padding:3px 10px;border-radius:12px;white-space:nowrap;
   text-shadow:0 1px 2px rgba(0,0,0,.3);transition:opacity .2s;}
 .tag.em{background:#fff;color:var(--ink);font-size:15px;font-weight:900;box-shadow:0 4px 10px rgba(0,30,60,.3);}
-#emotebar{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(118px + env(safe-area-inset-bottom));
+#emotebar{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(96px + env(safe-area-inset-bottom));
   display:none;gap:8px;padding:9px;background:rgba(16,45,75,.62);border-radius:16px;z-index:6;
   pointer-events:auto;max-width:94%;overflow-x:auto;backdrop-filter:blur(3px);}
 .emo{flex:none;border:none;border-radius:12px;background:#fff;color:var(--ink);cursor:pointer;
@@ -194,21 +195,21 @@ html,body{margin:0;height:100%;position:fixed;inset:0;overflow:hidden;background
   <div id="emotebar"></div>
   <div id="joy"><div id="joyn"></div></div>
   <div id="abtns">
-    <div class="actwrap" id="wrapSay">
-      <button class="act" id="btnSay" aria-label="Say"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H10l-4 4 .5-4H4z"/><path d="M8 9h8M8 12h5" stroke-width="1.8"/></svg></button>
-      <span class="alabel">SAY</span>
-    </div>
-    <div class="actwrap" id="wrapM">
-      <button class="act" id="btnM" aria-label="Build"><svg viewBox="0 0 24 24"><path d="M13.5 5.5 18 3l3 3-2.5 4.5L15 8z" fill="#fff" stroke="none"/><path d="M15 8 4 19l1 1L16 9"/></svg></button>
-      <span class="alabel">BUILD</span>
+    <div class="actwrap">
+      <button class="act" id="btnA" aria-label="Hop"><svg viewBox="0 0 24 24"><path d="M12 19V6"/><path d="m5.5 12.5 6.5-7 6.5 7"/></svg></button>
+      <span class="alabel">HOP</span>
     </div>
     <div class="actwrap">
       <button class="act" id="btnB" aria-label="Talk / Grab"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H10l-4 4 .5-4H4z"/></svg></button>
       <span class="alabel">TALK</span>
     </div>
-    <div class="actwrap">
-      <button class="act" id="btnA" aria-label="Hop"><svg viewBox="0 0 24 24"><path d="M12 19V6"/><path d="m5.5 12.5 6.5-7 6.5 7"/></svg></button>
-      <span class="alabel">HOP</span>
+    <div class="actwrap" id="wrapM">
+      <button class="act" id="btnM" aria-label="Build"><svg viewBox="0 0 24 24"><path d="M13.5 5.5 18 3l3 3-2.5 4.5L15 8z" fill="#fff" stroke="none"/><path d="M15 8 4 19l1 1L16 9"/></svg></button>
+      <span class="alabel">BUILD</span>
+    </div>
+    <div class="actwrap" id="wrapSay">
+      <button class="act" id="btnSay" aria-label="Say"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H10l-4 4 .5-4H4z"/><path d="M8 9h8M8 12h5" stroke-width="1.8"/></svg></button>
+      <span class="alabel">SAY</span>
     </div>
   </div>
   <div id="palette"></div>
