@@ -159,6 +159,19 @@ html,body{margin:0;height:100%;position:fixed;inset:0;overflow:hidden;background
 .shopprice .worn{color:#2f8b22;}
 .dic{width:1.15em;height:1.15em;vertical-align:-0.22em;image-rendering:pixelated;}
 
+/* ---- shop scene: fixed camera, menu panel on the left 2/3 ---- */
+#shoppanel{position:absolute;left:calc(10px + env(safe-area-inset-left));
+  top:calc(56px + env(safe-area-inset-top));bottom:calc(12px + env(safe-area-inset-bottom));
+  width:min(64%,640px);background:linear-gradient(180deg,rgba(255,255,255,.96),rgba(230,244,255,.96));
+  border-radius:20px;padding:14px 14px 12px;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  display:none;pointer-events:auto;z-index:7;box-shadow:0 16px 40px rgba(0,20,50,.4);color:var(--ink);}
+#shoppanel::-webkit-scrollbar{width:0;}
+#shoppanel h2{margin:0 0 2px;font-size:clamp(17px,3.8vmin,26px);font-weight:900;color:var(--grape);}
+#shoppanel .speech2{font-weight:700;font-size:12.5px;opacity:.8;margin:0 0 6px;}
+#shoppanel .shopgrid{grid-template-columns:repeat(4,1fr);margin-top:8px;}
+#shoppanel .actrow{display:flex;gap:8px;margin-top:10px;}
+#shoppanel .actrow .bigb{margin:0;flex:1;padding:.55em .6em;font-size:clamp(13px,2.8vmin,17px);}
+
 /* ---- toast + point pops ---- */
 #toast{position:absolute;left:50%;top:16%;transform:translateX(-50%) translateY(-8px);z-index:30;
   background:rgba(20,40,60,.92);color:#fff;font-weight:800;padding:.55em 1.2em;border-radius:1.4em;
@@ -221,6 +234,7 @@ html,body{margin:0;height:100%;position:fixed;inset:0;overflow:hidden;background
   <canvas id="mini"></canvas>
   <div id="tags"></div>
   <div id="emotebar"></div>
+  <div id="shoppanel"></div>
   <div id="joy"><div id="joyn"></div></div>
   <div id="abtns">
     <div class="actwrap">
@@ -268,7 +282,7 @@ const clamp=(v,a,b)=>v<a?a:v>b?b:v;
 const lerp=(a,b,t)=>a+(b-a)*t;
 const dist2=(ax,az,bx,bz)=>Math.hypot(ax-bx,az-bz);
 
-const HOP_BUILD='7.02a';
+const HOP_BUILD='7.02b';
 const SAVE_KEY='hoptopia1';
 const DEF_SAVE={started:false,critter:'frog',mode:'',coins:0,inv:{},quests:{},best:{},plot:[],pos:null,sound:true,music:true,tut:false,outfit:{hat:'none',neck:'none'},wardrobe:{}};
 let SV=loadSave();
@@ -585,10 +599,14 @@ function accHatSVG(id){switch(id){
   case 'hat_acorn':return '<g><path d="M28 16 Q28 2 50 2 Q72 2 72 16 Q60 12 50 12 Q40 12 28 16Z" fill="#8a5a2c" stroke="#6f451f" stroke-width="2"/><rect x="47" y="0" width="5" height="7" rx="2" fill="#6f451f"/></g>';
   case 'hat_crown':return '<g><path d="M34 20 L34 6 L42 13 L50 4 L58 13 L66 6 L66 20Z" fill="#ffd23e" stroke="#d9a81c" stroke-width="2"/><circle cx="50" cy="15" r="3.4" fill="#ff6f61"/></g>';
   case 'hat_shroom':return '<g><ellipse cx="50" cy="11" rx="27" ry="11" fill="#e04848" stroke="#b03030" stroke-width="2"/><circle cx="40" cy="8" r="3.5" fill="#fff"/><circle cx="58" cy="12" r="3" fill="#fff"/><circle cx="50" cy="5" r="2.5" fill="#fff"/></g>';
+  case 'hat_bow':return '<g><ellipse cx="37" cy="10" rx="12" ry="8" fill="#f25c97" stroke="#d63b86" stroke-width="2"/><ellipse cx="63" cy="10" rx="12" ry="8" fill="#f25c97" stroke="#d63b86" stroke-width="2"/><circle cx="50" cy="10" r="5" fill="#d63b86"/></g>';
+  case 'hat_top':return '<g><rect x="34" y="0" width="32" height="16" rx="2" fill="#3a2f4a"/><rect x="34" y="10" width="32" height="4" fill="#e04848"/><rect x="24" y="15" width="52" height="5" rx="2.5" fill="#3a2f4a"/></g>';
 }return '';}
 function accNeckSVG(id){switch(id){
   case 'neck_scarf':return '<g><rect x="30" y="49" width="40" height="10" rx="5" fill="#e04848"/><rect x="56" y="55" width="9" height="18" rx="4" fill="#e04848"/><rect x="56" y="66" width="9" height="3" fill="#b03030"/></g>';
   case 'neck_shell':return '<g><path d="M34 52 Q50 62 66 52" fill="none" stroke="#d9b95c" stroke-width="2.5"/><ellipse cx="50" cy="61" rx="6" ry="7" fill="#ffb9cf" stroke="#e06a94" stroke-width="1.5"/><path d="M50 55 V66 M45 57 L55 64 M55 57 L45 64" stroke="#e06a94" stroke-width="1"/></g>';
+  case 'neck_flower':return '<g><circle cx="34" cy="52" r="5.5" fill="#f25c97"/><circle cx="42" cy="57" r="5.5" fill="#ffd23e"/><circle cx="50" cy="59" r="5.5" fill="#ffffff"/><circle cx="58" cy="57" r="5.5" fill="#ffd23e"/><circle cx="66" cy="52" r="5.5" fill="#f25c97"/><g fill="#e07818"><circle cx="34" cy="52" r="2"/><circle cx="42" cy="57" r="2"/><circle cx="50" cy="59" r="2"/><circle cx="58" cy="57" r="2"/><circle cx="66" cy="52" r="2"/></g></g>';
+  case 'neck_bowtie':return '<g><path d="M50 55 L35 47 V63 Z" fill="#4a90e2" stroke="#2e6db4" stroke-width="1.5"/><path d="M50 55 L65 47 V63 Z" fill="#4a90e2" stroke="#2e6db4" stroke-width="1.5"/><circle cx="50" cy="55" r="4.5" fill="#2e6db4"/></g>';
 }return '';}
 function accCapeSVG(id){return id==='neck_leaf'
   ?'<path d="M20 52 Q14 90 24 96 L76 96 Q86 90 80 52 Q65 44 50 44 Q35 44 20 52Z" fill="#4aa832" stroke="#2f7d1e" stroke-width="2"/><path d="M50 48 V92" stroke="#2f7d1e" stroke-width="1.5" opacity=".5"/>'
@@ -609,13 +627,17 @@ function mannequinSVG(hat,neck,vb){
 
 /* ---- Madame Poppy's boutique catalogue ---- */
 const SHOP_ITEMS=[
-  {id:'crown_flower',name:'Flower Crown',slot:'hat',cost:0,desc:'free — on the house!'},
+  {id:'crown_flower',name:'Flower Crown',slot:'hat',cost:0},
+  {id:'hat_acorn',name:'Acorn Cap',slot:'hat',cost:0},
+  {id:'hat_bow',name:'Big Bow',slot:'hat',cost:0},
   {id:'hat_lily',name:'Lilypad Hat',slot:'hat',cost:8},
   {id:'hat_straw',name:'Straw Sun Hat',slot:'hat',cost:10},
-  {id:'hat_acorn',name:'Acorn Cap',slot:'hat',cost:8},
   {id:'hat_shroom',name:'Mushroom Cap',slot:'hat',cost:12},
+  {id:'hat_top',name:'Fancy Top Hat',slot:'hat',cost:18},
   {id:'hat_crown',name:'Royal Crown',slot:'hat',cost:25},
-  {id:'neck_scarf',name:'Cozy Scarf',slot:'neck',cost:8},
+  {id:'neck_scarf',name:'Cozy Scarf',slot:'neck',cost:0},
+  {id:'neck_flower',name:'Flower Lei',slot:'neck',cost:0},
+  {id:'neck_bowtie',name:'Dapper Bow Tie',slot:'neck',cost:9},
   {id:'neck_shell',name:'Shell Necklace',slot:'neck',cost:10},
   {id:'neck_leaf',name:'Leaf Cape',slot:'neck',cost:12},
 ];
@@ -642,7 +664,18 @@ function buildArcade(ax,az,g){
   ARCADE.x=ax;ARCADE.z=az;ARCADE.g=g;
 }
 const ARCADE={x:0,z:0,g:0};
+/* enclosed shops registered by builders (fixed-camera scenes) */
 
+function signPanel(cx,y0,cz,border,glyph){
+  for(let dx=-3;dx<=3;dx++)for(let dy=0;dy<5;dy++){
+    const e=dx===-3||dx===3||dy===0||dy===4;
+    sb(cx+dx,y0+dy,cz,e?border:B.stem);}
+  for(const gp of glyph)sb(cx+gp[0],y0+gp[1],cz,gp[2]);
+}
+const SIGN_HAT=[[0,3,B.padY],[-1,2,B.padY],[0,2,B.padY],[1,2,B.padY],
+  [-2,1,B.padY],[-1,1,B.padY],[0,1,B.padY],[1,1,B.padY],[2,1,B.padY]];
+const SIGN_ARCADE=[[-2,1,B.padB],[-2,2,B.padB],[0,1,B.padR],[0,2,B.padR],[2,1,B.padY],[2,2,B.padY]];
+const SIGN_MARKET=[[0,3,B.padY],[-1,2,B.padY],[0,2,B.lantern],[1,2,B.padY],[0,1,B.padY]];
 function boutique(cx,cz,g){
   clearAbove(cx-5,cz-4,cx+5,cz+4,g);
   floorPad(cx-4,cz-3,cx+4,cz+3,g,B.plank);
@@ -655,9 +688,19 @@ function boutique(cx,cz,g){
   for(let x=cx-2;x<=cx+2;x++)sb(x,g,cz-1,B.plank);
   sb(cx-3,g,cz-2,B.lantern);sb(cx+3,g,cz-2,B.flowP);
   sb(cx-3,g+2,cz+3,B.lantern);sb(cx+3,g+2,cz+3,B.lantern);
-  sb(cx,g+3,cz+4,B.flag);
   sb(cx-2,g,cz+4,B.flowP);sb(cx+2,g,cz+4,B.flowY);
+  /* big hat sign over the door — readable before you can read */
+  signPanel(cx,g+5,cz+3,B.roofP,SIGN_HAT);
+  /* the shop scene: fixed camera, vendor at the counter, fitting spot in front */
+  SHOPS.push({id:'boutique',npc:'poppy',
+    box:{x0:cx-3,x1:cx+3,z0:cz-2,z1:cz+2,y:g},
+    fit:[cx+1.3,g,cz+0.9],
+    vendor:[cx+1.3,cz-1.6],
+    exit:[cx+0.5,cz+4.6],
+    eye:[cx-2.8,g+2.5,cz+2.8],
+    tgt:[cx-0.4,g+0.8,cz-1.8]});
 }
+const SHOPS=[];
 function buildCity(){
   const g=CITY.h,cx=CITY.x,cz=CITY.z;
   for(let z=cz-40;z<=cz+40;z++)for(let x=cx-40;x<=cx+40;x++){
@@ -678,6 +721,14 @@ function buildCity(){
   hs.forEach((p,i)=>hut(cx+p[0],cz+p[1],g,i%2?B.mud:B.plank,i%2?B.roofB:B.roofP));
   for(let i=-36;i<=36;i+=12){if(Math.abs(i)>6){lamp(cx+i,cz+3,g);lamp(cx+3,cz+i,g);}}
   buildArcade(cx-16,cz+13,g);
+  /* arcade sign on posts at the plaza entrance */
+  sb(cx-19,g,cz+19,B.wood);sb(cx-19,g+1,cz+19,B.wood);sb(cx-19,g+2,cz+19,B.wood);sb(cx-19,g+3,cz+19,B.wood);
+  sb(cx-13,g,cz+19,B.wood);sb(cx-13,g+1,cz+19,B.wood);sb(cx-13,g+2,cz+19,B.wood);sb(cx-13,g+3,cz+19,B.wood);
+  signPanel(cx-16,g+4,cz+19,B.roofB,SIGN_ARCADE);
+  /* market sign behind the stalls */
+  sb(cx+11,g,cz-8,B.wood);sb(cx+11,g+1,cz-8,B.wood);sb(cx+11,g+2,cz-8,B.wood);sb(cx+11,g+3,cz-8,B.wood);
+  sb(cx+17,g,cz-8,B.wood);sb(cx+17,g+1,cz-8,B.wood);sb(cx+17,g+2,cz-8,B.wood);sb(cx+17,g+3,cz-8,B.wood);
+  signPanel(cx+14,g+4,cz-8,B.roofB,SIGN_MARKET);
   boutique(cx+18,cz+12,g);
   /* flower planters on the plaza */
   [[-6,-6],[6,-6],[-6,6],[6,6]].forEach(p=>{sb(cx+p[0],g-1,cz+p[1],B.dirt);sb(cx+p[0],g,cz+p[1],(p[0]+p[1])%2?B.flowP:B.flowY);});
@@ -1251,6 +1302,11 @@ function spawnNPCs(){
   }
 }
 function updateNPC(n,dt){
+  if(SHOP.active&&SHOP.vn===n){ /* vendor holds their post, watching the customer */
+    n.moving=false;
+    n.yaw=Math.atan2(P.x-n.x,P.z-n.z);
+    return;
+  }
   if(dialog.npc===n){
     const dx=P.x-n.x,dz=P.z-n.z;
     if(Math.hypot(dx,dz)>0.5)n.yaw=Math.atan2(dx,dz);
@@ -1295,7 +1351,7 @@ function drawCritter(e,t){
   if(sp.shell)part(mT(0,0.76,-0.25),0.5,0.46,0.14,'#8a6a3a');
   if(sp.tail)part(mMul(mT(0,0.5,-0.3),mRX(0.6)),0.18,0.1,0.42,sp.dark);
   /* outfits: hats + neck pieces from Madame Poppy's Boutique */
-  const fit=e===P?SV.outfit:e.outfit;
+  const fit=e===P?((SHOP.active&&SHOP_PREV)?SHOP_PREV:SV.outfit):e.outfit;
   if(fit){
     switch(fit.hat){
       case 'crown_flower':
@@ -1320,6 +1376,14 @@ function drawCritter(e,t){
         part(mT(0,1.56,0),0.58,0.17,0.58,'#e04848');
         part(mT(0.14,1.66,0.12),0.1,0.05,0.1,'#ffffff');
         part(mT(-0.15,1.66,-0.1),0.1,0.05,0.1,'#ffffff');break;
+      case 'hat_bow':
+        part(mT(-0.16,1.57,0),0.24,0.17,0.12,'#f25c97');
+        part(mT(0.16,1.57,0),0.24,0.17,0.12,'#f25c97');
+        part(mT(0,1.57,0),0.11,0.11,0.14,'#d63b86');break;
+      case 'hat_top':
+        part(mT(0,1.52,0),0.58,0.06,0.58,'#3a2f4a');
+        part(mT(0,1.75,0),0.38,0.4,0.38,'#3a2f4a');
+        part(mT(0,1.59,0),0.4,0.09,0.4,'#e04848');break;
     }
     switch(fit.neck){
       case 'neck_scarf':
@@ -1331,6 +1395,15 @@ function drawCritter(e,t){
       case 'neck_leaf':
         part(mT(0,0.82,-0.27),0.52,0.55,0.05,'#4aa832');
         part(mT(0,1.05,-0.2),0.56,0.1,0.12,'#3f8a23');break;
+      case 'neck_flower':{
+        const lei=[[-0.22,1.06,0.14,'#f25c97'],[-0.11,1.0,0.22,'#ffd23e'],
+          [0,0.98,0.25,'#ffffff'],[0.11,1.0,0.22,'#ffd23e'],[0.22,1.06,0.14,'#f25c97']];
+        for(const l of lei)part(mT(l[0],l[1],l[2]),0.11,0.11,0.09,l[3]);
+        break;}
+      case 'neck_bowtie':
+        part(mT(-0.11,1.06,0.21),0.14,0.12,0.05,'#4a90e2');
+        part(mT(0.11,1.06,0.21),0.14,0.12,0.05,'#4a90e2');
+        part(mT(0,1.06,0.23),0.08,0.08,0.04,'#2e6db4');break;
     }
   }
   if(e.bang)part(mT(0,1.78+Math.sin(t*3+(e.ph||0))*0.06,0),0.12,0.24,0.12,'#ffd23e');
@@ -1517,12 +1590,12 @@ bindBtn($('#btnM'),()=>toggleMaker());
 bindBtn($('#btnPause'),()=>openPause());
 bindBtn($('#btnInv'),()=>openInventory());
 function uiButtonA(){
-  if(modalOpen)return;
+  if(modalOpen||SHOP.active)return;
   if(dialog.npc){dialogNext();return;}
   playerJump();
 }
 function uiButtonB(){
-  if(modalOpen)return;
+  if(modalOpen||SHOP.active)return;
   if(dialog.npc){dialogNext();return;}
   interactAction();
 }
@@ -1661,11 +1734,44 @@ function dialogNext(){
 }
 function closeDialog(){dialog.npc=null;dlgEl.style.display='none';}
 
-/* ---- Madame Poppy's shop: dress the mannequin, then buy the look ---- */
+/* ---- shop scene: your own critter is the mannequin, live in 3D ---- */
 let SHOP_PREV=null;
-function openShop(){
-  closeDialog();
-  if(!SHOP_PREV)SHOP_PREV={hat:SV.outfit.hat,neck:SV.outfit.neck};
+const SHOP={active:null,checkT:0};
+const POPPY_LINES=['Welcome, dearie! Tap the racks — you model it yourself!',
+  'Ooh, that would look darling on you!','Every piece is critter-crafted, you know.',
+  'Spin around, let me see the whole look!'];
+function enterShop(shop){
+  if(SHOP.active)return;
+  closeDialog();if(modalOpen)closeModal();
+  SHOP.active=shop;
+  /* station the vendor behind the counter, facing the customer */
+  const vn=NPCS.find(n=>n.id===shop.npc);
+  if(vn&&shop.vendor){vn.x=shop.vendor[0]+0.0;vn.z=shop.vendor[1];vn.y=shop.fit[1];vn.moving=false;}
+  SHOP.vn=vn||null;
+  SHOP_PREV={hat:SV.outfit.hat,neck:SV.outfit.neck};
+  teleport([shop.fit[0],shop.fit[1]+0.2,shop.fit[2]]);
+  P.yaw=Math.PI;
+  exitBuild();
+  $('#abtns').style.display='none';
+  $('#compass').style.display='none';
+  $('#mini').style.display='none';
+  renderShopPanel();
+  $('#shoppanel').style.display='block';
+  sTalk();
+}
+function exitShop(){
+  const shop=SHOP.active;
+  if(!shop)return;
+  SHOP.active=null;SHOP_PREV=null;
+  $('#shoppanel').style.display='none';
+  $('#abtns').style.display='';
+  $('#compass').style.display='';
+  $('#mini').style.display='';
+  teleport([shop.exit[0],groundY(shop.exit[0],shop.exit[1])+0.2,shop.exit[1]]);
+  cam.yaw=0;cam.pitch=0.4;
+  SHOP.checkT=2; /* don't instantly re-enter */
+}
+function renderShopPanel(){
   const pv=SHOP_PREV;
   let cards='';
   for(const it of SHOP_ITEMS){
@@ -1677,7 +1783,7 @@ function openShop(){
       +mannequinSVG(it.slot==='hat'?it.id:'none',it.slot==='neck'?it.id:'none',vb)
       +'<div class="shopname">'+it.name+'</div>'
       +'<div class="shopprice">'+(worn?'<span class="worn">wearing ✓</span>'
-        :owned?'owned':'<img src="'+ICONS.coin+'"> '+it.cost)+'</div>'
+        :owned?'free to wear':'<img src="'+ICONS.coin+'"> '+it.cost)+'</div>'
       +'</div>';
   }
   let cost=0;
@@ -1689,34 +1795,40 @@ function openShop(){
     }
   }
   const differs=pv.hat!==SV.outfit.hat||pv.neck!==SV.outfit.neck;
-  const btns=[];
-  if(differs)btns.push([cost>0?'Buy & wear · '+cost+' coins':'Wear it!','',()=>{
+  const line=POPPY_LINES[(renderShopPanel._n=(renderShopPanel._n||0))%POPPY_LINES.length];
+  $('#shoppanel').innerHTML=
+    '<h2>Madame Poppy’s Boutique</h2>'
+    +'<p class="speech2">“'+line+'”</p>'
+    +'<p style="margin:0;font-weight:800"><img src="'+ICONS.coin+'" style="width:16px;vertical-align:-3px"> '
+    +SV.coins+' coins · <span style="opacity:.65">that’s YOU trying things on →</span></p>'
+    +'<div class="shopgrid">'+cards+'</div>'
+    +'<div class="actrow">'
+    +(differs?'<button class="bigb" id="shopBuy">'+(cost>0?'Buy & wear · '+cost+' coins':'Wear it!')+'</button>':'')
+    +'<button class="bigb red" id="shopExit">Leave the shop</button></div>';
+  document.querySelectorAll('#shoppanel .shopcard').forEach(el=>{
+    el.onclick=()=>{
+      const it=SHOP_ITEMS.find(x=>x.id===el.dataset.id);
+      SHOP_PREV[it.slot]=SHOP_PREV[it.slot]===it.id?'none':it.id;
+      renderShopPanel._n=(renderShopPanel._n||0)+1;
+      sTalk();renderShopPanel();
+    };});
+  const buy=$('#shopBuy');
+  if(buy)buy.onclick=()=>{
     if(SV.coins<cost){toast('Not enough coins yet — try the Arcade!');sBad();return;}
     SV.coins-=cost;
     for(const slot of ['hat','neck']){
-      const id=pv[slot];
+      const id=SHOP_PREV[slot];
       if(id!=='none')SV.wardrobe[id]=1;
     }
-    SV.outfit={hat:pv.hat,neck:pv.neck};
+    SV.outfit={hat:SHOP_PREV.hat,neck:SHOP_PREV.neck};
     save();updateHUD();if(cost>0)sCoin();else sTalk();
     toast('Looking fabulous!');
     mpSendFit();
-    openShop();
-  }]);
-  btns.push(['Done','gray',()=>{SHOP_PREV=null;closeModal();}]);
-  openModal('<h2>Madame Poppy’s Boutique</h2>'
-    +'<p style="margin:-2px 0 0"><img src="'+ICONS.coin+'" style="width:18px;vertical-align:-3px"> '+SV.coins+' coins</p>'
-    +'<div class="shopwrap">'
-    +'<div class="manq">'+mannequinSVG(pv.hat,pv.neck)
-    +'<p class="dim">tap the racks to dress the mannequin!</p></div>'
-    +'<div class="shopgrid">'+cards+'</div></div>',btns);
-  document.querySelectorAll('.shopcard').forEach(el=>{
-    el.onclick=()=>{
-      const it=SHOP_ITEMS.find(x=>x.id===el.dataset.id);
-      pv[it.slot]=pv[it.slot]===it.id?'none':it.id;
-      sTalk();openShop();
-    };});
+    renderShopPanel();
+  };
+  $('#shopExit').onclick=exitShop;
 }
+function openShop(){if(SHOPS.length)enterShop(SHOPS[0]);}
 
 /* ---- HUD ---- */
 function updateHUD(){
@@ -2057,7 +2169,7 @@ function endPlotTest(){
 
 /* ---- tap + interact dispatch ---- */
 function gameTap(sx,sy){
-  if(modalOpen)return;
+  if(modalOpen||SHOP.active)return;
   if(dialog.npc){dialogNext();return;}
   const dir=screenRay(sx,sy);
   if(makerOn&&makerSel){
@@ -2226,10 +2338,23 @@ function frame(now){
   const t=now/1000;
   pollGamepad(dt);keyCam(dt);
   const wasWater=P.inWater,wasGround=P.onGround,fallVy=P.vy;
-  if(!modalOpen){
+  if(SHOP.active){
+    P.moving=false;P.vx=0;P.vz=0;
+    P.yaw+=dt*0.8; /* slow turntable so the outfit shows all around */
+  }else if(!modalOpen){
     updatePlayer(dt);
     checkPads(dt);
     updateMini(dt);
+    SHOP.checkT-=dt;
+    if(SHOP.checkT<=0){
+      SHOP.checkT=0.25;
+      for(const sh of SHOPS){
+        const b=sh.box;
+        if(P.x>b.x0&&P.x<b.x1+1&&P.z>b.z0&&P.z<b.z1+1&&Math.abs(P.y-b.y)<2&&!mini){
+          enterShop(sh);break;
+        }
+      }
+    }
   }
   /* juice: splash on water entry, dust puff on hard landings, drifting pollen */
   if(P.inWater&&!wasWater&&fallVy<-2){
@@ -2251,7 +2376,13 @@ function frame(now){
   for(const n of NPCS)if(Math.hypot(n.x-P.x,n.z-P.z)<48)updateNPC(n,dt);
   updateBangs();
   remeshDirty(3);
-  const c=cameraEye();
+  let c;
+  if(SHOP.active){
+    const sh=SHOP.active;
+    const dx=sh.tgt[0]-sh.eye[0],dy=sh.tgt[1]-sh.eye[1],dz=sh.tgt[2]-sh.eye[2];
+    const l=Math.hypot(dx,dy,dz)||1;
+    c={eye:sh.eye,tgt:sh.tgt,fwd:[dx/l,dy/l,dz/l]};
+  }else c=cameraEye();
   CAMEYE=c.eye;CAMFWD=c.fwd;
   const proj=mPersp(FOVY,canvas.width/canvas.height,0.1,320);
   const view=mLook(c.eye[0],c.eye[1],c.eye[2],c.tgt[0],c.tgt[1],c.tgt[2]);
