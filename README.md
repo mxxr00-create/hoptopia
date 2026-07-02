@@ -45,6 +45,19 @@ engine, zero dependencies), launched from the home screen or Games menu.
 - **Touch-first controls** (floating joystick + look-drag + big HOP/TALK buttons),
   full **gamepad** support, and keyboard/mouse on desktop. Progress, coins,
   quests and your Maker Isle build all save locally.
+- **Play Together** (invite-only multiplayer) — host a pond and friends hop in
+  with a session-only secret code. Knock-to-enter approval, room lock, kick +
+  block, preset emotes only (no chat), guest building off by default. Peer-to-
+  peer WebRTC with automatic fallback to a Firebase Realtime Database relay
+  (REST + EventSource, no SDK); the deterministic world seed means only edits
+  and positions ever cross the wire. Guests visit the host's world; approved
+  guest builds persist in the host's save.
+
+### Deployment
+Pushed to GitHub → **GitHub Pages** auto-deploys `main` at
+`https://mxxr00-create.github.io/hoptopia/`. Multiplayer needs the Firebase
+project's Realtime Database rules (locked-down room schema) published once via
+the Firebase console.
 
 ### Ribbit (the kids' Reddit)
 A frog-themed forum: posts ("ribbits") in communities (p/PondLife, p/FrogFacts,
