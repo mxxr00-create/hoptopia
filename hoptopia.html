@@ -241,8 +241,11 @@ const lerp=(a,b,t)=>a+(b-a)*t;
 const dist2=(ax,az,bx,bz)=>Math.hypot(ax-bx,az-bz);
 
 const SAVE_KEY='hoptopia1';
-const DEF_SAVE={started:false,critter:'frog',mode:'',coins:0,inv:{},quests:{},best:{},plot:[],pos:null,sound:true,tut:false};
+const DEF_SAVE={started:false,critter:'frog',mode:'',coins:0,inv:{},quests:{},best:{},plot:[],pos:null,sound:true,music:true,tut:false,outfit:{hat:'none',neck:'none'},wardrobe:{}};
 let SV=loadSave();
+SV.outfit=SV.outfit||{hat:'none',neck:'none'};
+SV.wardrobe=SV.wardrobe||{};
+if(SV.music===undefined)SV.music=true;
 function loadSave(){try{const s=JSON.parse(localStorage.getItem(SAVE_KEY)||'null');
   return s?Object.assign(JSON.parse(JSON.stringify(DEF_SAVE)),s):JSON.parse(JSON.stringify(DEF_SAVE));}
  catch(e){return JSON.parse(JSON.stringify(DEF_SAVE));}}
@@ -386,7 +389,7 @@ function critterSVG(sp){const s=SPECIES[sp];
   (s.teeth?`<rect x="43" y="56" width="6" height="9" rx="1.5" fill="#fff"/><rect x="51" y="56" width="6" height="9" rx="1.5" fill="#fff"/>`:'')+
   `</svg>`;}
 /* ========== 3. world generation ========== */
-const W=192,H=44,D=192,WL=11;
+const W=256,H=44,D=256,WL=11; /* city + towns sit in the south-west; wilds beyond */
 const world=new Uint8Array(W*H*D);
 const colI=(x,z)=>(z*W+x)*H;
 const gb=(x,y,z)=>(x<0||y<0||z<0||x>=W||y>=H||z>=D)?0:world[colI(x,z)+y];
@@ -535,6 +538,19 @@ function stall(cx,cz,g){
   for(let x=cx-2;x<=cx+2;x++)for(let z=cz-1;z<=cz+1;z++)sb(x,g+2,z,(x+z)%2?B.roofP:B.roofB);
 }
 
+/* ---- Madame Poppy's boutique catalogue ---- */
+const SHOP_ITEMS=[
+  {id:'crown_flower',name:'Flower Crown',slot:'hat',cost:0,desc:'free — on the house!'},
+  {id:'hat_lily',name:'Lilypad Hat',slot:'hat',cost:8},
+  {id:'hat_straw',name:'Straw Sun Hat',slot:'hat',cost:10},
+  {id:'hat_acorn',name:'Acorn Cap',slot:'hat',cost:8},
+  {id:'hat_shroom',name:'Mushroom Cap',slot:'hat',cost:12},
+  {id:'hat_crown',name:'Royal Crown',slot:'hat',cost:25},
+  {id:'neck_scarf',name:'Cozy Scarf',slot:'neck',cost:8},
+  {id:'neck_shell',name:'Shell Necklace',slot:'neck',cost:10},
+  {id:'neck_leaf',name:'Leaf Cape',slot:'neck',cost:12},
+];
+
 /* ---- mini-game data (pads filled in by buildArcade) ---- */
 const MINI={
   hop:{name:'Lily Hop',pad:null,desc:'Hop across the lily pads to the flag! Fall in the water and you restart at your last checkpoint.',reward:15,again:5},
@@ -576,6 +592,10 @@ function buildCity(){
   hs.forEach((p,i)=>hut(cx+p[0],cz+p[1],g,i%2?B.mud:B.plank,i%2?B.roofB:B.roofP));
   for(let i=-24;i<=24;i+=12){if(Math.abs(i)>4){lamp(cx+i,cz+2,g);lamp(cx+2,cz+i,g);}}
   buildArcade(cx-11,cz+9,g);
+  /* Madame Poppy's Boutique */
+  hut(cx+14,cz+9,g,B.plank,B.roofP);
+  sb(cx+14,g+2,cz+12,B.flag);
+  sb(cx+12,g,cz+12,B.flowP);sb(cx+16,g,cz+12,B.flowY);
   /* flower planters on the plaza */
   [[-5,-5],[5,-5],[-5,5],[5,5]].forEach(p=>{sb(cx+p[0],g-1,cz+p[1],B.dirt);sb(cx+p[0],g,cz+p[1],(p[0]+p[1])%2?B.flowP:B.flowY);});
 }
@@ -646,9 +666,17 @@ const NPC_DEFS=[
      "Tap plants, sticks and shells to scavenge them into your bag.",
      "This is Lilyopolis, our big city. Step on a glowing Arcade pad to play a game!"]},
   {id:'mayor',name:'Mayor Croakins',sp:'toad',x:CITY.x+1,z:CITY.z-8,r:5,
+   outfit:{hat:'hat_crown',neck:'none'},
+   quest:{wear:true,coins:10,
+     ask:"It's Fashion Week in Lilyopolis! Visit Madame Poppy's Boutique — pink roof, east of the fountain — and put something on. Show me your style!",
+     thanks:"Magnifique! You look SPLENDID. Ten coins for the best-dressed critter on the pond!"},
    lines:["Welcome to Lilyopolis, the greatest city on the pond!",
      "Every wall here is honest mud, driftwood and reed — critter-built!",
      "Explore the towns: Reedville in the swamp, Mosshollow in the forest, Pebble Bay on the shore."]},
+  {id:'poppy',name:'Madame Poppy',sp:'newt',x:CITY.x+14,z:CITY.z+12,r:3,
+   outfit:{hat:'crown_flower',neck:'neck_scarf'},shop:true,
+   lines:["Welcome to my boutique, dearie! Hats, scarves, capes — all critter-crafted.",
+     "The flower crown is FREE for first-time customers. Everything else costs a few coins."]},
   {id:'pixel',name:'Pixel',sp:'tree',x:CITY.x-11,z:CITY.z+13,r:4,
    lines:["This is Arcade Plaza! Step on a glowing pad to play a game.",
      "BLUE pad: Lily Hop course. RED: Berry Scramble. YELLOW: Firefly Chase!",
@@ -710,12 +738,13 @@ void main(){
 const TERR_FS=`precision mediump float;
 varying vec2 vT;varying float vL;varying float vD;varying vec3 vWP;
 uniform sampler2D uTex;uniform float uAlpha;uniform vec3 uFog;uniform vec2 uFogD;
-uniform highp float uTime;uniform float uWave;
+uniform highp float uTime;uniform float uWave;uniform float uAmb;
 void main(){vec4 c=texture2D(uTex,vT);if(c.a<0.4)discard;
 vec3 col=c.rgb*vL;
 if(uWave>0.5){
   float s=sin(uTime*2.6+vWP.x*1.9+vWP.z*2.4)+sin(uTime*1.7+vWP.x*3.1-vWP.z*1.3);
   col*=1.0+0.05*s;}
+col*=uAmb;
 float f=clamp((vD-uFogD.x)/(uFogD.y-uFogD.x),0.0,1.0);
 gl_FragColor=vec4(mix(col,uFog,f),uAlpha);}`;
 const ENT_VS=`attribute vec3 aP;attribute float aL;
@@ -724,9 +753,9 @@ varying float vL;varying float vD;
 void main(){vec4 wp=uM*vec4(aP,1.0);gl_Position=uPV*wp;vL=aL;vD=distance(wp.xyz,uCam);}`;
 const ENT_FS=`precision mediump float;
 varying float vL;varying float vD;
-uniform vec3 uCol;uniform vec3 uFog;uniform vec2 uFogD;uniform float uEAlpha;
+uniform vec3 uCol;uniform vec3 uFog;uniform vec2 uFogD;uniform float uEAlpha;uniform float uAmb;
 void main(){float f=clamp((vD-uFogD.x)/(uFogD.y-uFogD.x),0.0,1.0);
-gl_FragColor=vec4(mix(uCol*vL,uFog,f),uEAlpha);}`;
+gl_FragColor=vec4(mix(uCol*vL*uAmb,uFog,f),uEAlpha);}`;
 
 const PT={p:mkProg(TERR_VS,TERR_FS)},PE={p:mkProg(ENT_VS,ENT_FS)};
 PT.aP=gl.getAttribLocation(PT.p,'aP');PT.aT=gl.getAttribLocation(PT.p,'aT');PT.aL=gl.getAttribLocation(PT.p,'aL');
@@ -735,10 +764,12 @@ PT.uMVP=gl.getUniformLocation(PT.p,'uMVP');PT.uCam=gl.getUniformLocation(PT.p,'u
 PT.uTex=gl.getUniformLocation(PT.p,'uTex');PT.uAlpha=gl.getUniformLocation(PT.p,'uAlpha');
 PT.uFog=gl.getUniformLocation(PT.p,'uFog');PT.uFogD=gl.getUniformLocation(PT.p,'uFogD');
 PT.uTime=gl.getUniformLocation(PT.p,'uTime');PT.uWave=gl.getUniformLocation(PT.p,'uWave');
+PT.uAmb=gl.getUniformLocation(PT.p,'uAmb');
 PE.aP=gl.getAttribLocation(PE.p,'aP');PE.aL=gl.getAttribLocation(PE.p,'aL');
 PE.uPV=gl.getUniformLocation(PE.p,'uPV');PE.uM=gl.getUniformLocation(PE.p,'uM');PE.uCam=gl.getUniformLocation(PE.p,'uCam');
 PE.uCol=gl.getUniformLocation(PE.p,'uCol');PE.uFog=gl.getUniformLocation(PE.p,'uFog');PE.uFogD=gl.getUniformLocation(PE.p,'uFogD');
 PE.uEAlpha=gl.getUniformLocation(PE.p,'uEAlpha');
+PE.uAmb=gl.getUniformLocation(PE.p,'uAmb');
 
 const tex=gl.createTexture();
 gl.bindTexture(gl.TEXTURE_2D,tex);
@@ -749,7 +780,8 @@ gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
 gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
 gl.enable(gl.DEPTH_TEST);
 gl.clearColor(0.62,0.824,0.949,1);
-const FOG=[0.62,0.824,0.949],FOGD=[58,92],VIEW_DIST=100;
+const FOG=[0.62,0.824,0.949],FOGD=[80,126],VIEW_DIST=136;
+let AMB=1,DAYA=1,NIGHTA=0; /* day/night state, updated every frame from the real clock */
 
 /* matrices (column-major) */
 function mPersp(fov,asp,n,f){const t=1/Math.tan(fov/2),nf=1/(n-f);
@@ -887,6 +919,7 @@ function beginEnts(pv,cam){gl.useProgram(PE.p);
   gl.uniform3f(PE.uFog,FOG[0],FOG[1],FOG[2]);
   gl.uniform2f(PE.uFogD,FOGD[0],FOGD[1]);
   gl.uniform1f(PE.uEAlpha,1);
+  gl.uniform1f(PE.uAmb,AMB);
   gl.bindBuffer(gl.ARRAY_BUFFER,cubeVB);
   gl.enableVertexAttribArray(PE.aP);gl.vertexAttribPointer(PE.aP,3,gl.FLOAT,false,16,0);
   gl.enableVertexAttribArray(PE.aL);gl.vertexAttribPointer(PE.aL,1,gl.FLOAT,false,16,12);}
@@ -895,11 +928,53 @@ function drawBox(m,colHex){gl.uniformMatrix4fv(PE.uM,false,m);
   gl.drawArrays(gl.TRIANGLES,0,36);}
 function drawBoxA(m,colHex,a){gl.uniform1f(PE.uEAlpha,a);drawBox(m,colHex);gl.uniform1f(PE.uEAlpha,1);}
 
+/* ---- real-time day/night: the pond lives on the host's actual clock ---- */
+const DAYK=[ /* hour, sky color, ambient light */
+  [0.0,[0.06,0.08,0.20],0.42],
+  [4.6,[0.06,0.08,0.20],0.42],
+  [6.2,[0.94,0.60,0.44],0.72],
+  [7.6,[0.62,0.824,0.949],1.0],
+  [16.8,[0.62,0.824,0.949],1.0],
+  [18.4,[0.97,0.64,0.40],0.80],
+  [19.9,[0.28,0.21,0.38],0.55],
+  [21.2,[0.06,0.08,0.20],0.42],
+  [24.0,[0.06,0.08,0.20],0.42]];
+function todNow(){
+  const d=new Date();
+  let h=d.getHours()+d.getMinutes()/60+d.getSeconds()/3600;
+  if(MP&&MP.role==='guest'&&MP.todOff!=null)h=(h+MP.todOff+24)%24;
+  return h;
+}
+function skyTick(){
+  const h=todNow();
+  let i=0;while(i<DAYK.length-2&&DAYK[i+1][0]<h)i++;
+  const a=DAYK[i],b2=DAYK[i+1];
+  const t=clamp((h-a[0])/((b2[0]-a[0])||1),0,1);
+  FOG[0]=lerp(a[1][0],b2[1][0],t);FOG[1]=lerp(a[1][1],b2[1][1],t);FOG[2]=lerp(a[1][2],b2[1][2],t);
+  AMB=lerp(a[2],b2[2],t);
+  DAYA=clamp((AMB-0.72)/0.28,0,1);
+  NIGHTA=clamp((0.55-AMB)/0.13,0,1);
+}
+const STARS=[];
+for(let i=0;i<44;i++){
+  const a=hash2(i*13+5,i*29+11)*Math.PI*2,e=0.15+hash2(i*7,i*3)*1.1;
+  STARS.push([Math.cos(a)*Math.cos(e),Math.sin(e),Math.sin(a)*Math.cos(e),0.4+hash2(i,i*5)*0.5]);
+}
+const LANTERNS=[];
+function scanLanterns(){
+  LANTERNS.length=0;
+  for(let z=0;z<D;z++)for(let x=0;x<W;x++){
+    const base=colI(x,z);
+    for(let y=0;y<H;y++)if(world[base+y]===B.lantern)LANTERNS.push([x+0.5,y+0.5,z+0.5]);
+  }
+}
+
 /* ---- sky: sun + drifting clouds ---- */
+const CWRAP=W+80;
 const CLOUDS=[];
 for(let i=0;i<8;i++){
   const r1=hash2(i*17+3,i*31+7),r2=hash2(i*7+11,i*13+5),r3=hash2(i*23+1,i*3+9);
-  CLOUDS.push({x:r1*272-40,z:r2*272-40,y:48+r3*5,sx:9+r1*13,sz:5+r2*8,sp:0.5+r3*0.9});
+  CLOUDS.push({x:r1*CWRAP-40,z:r2*CWRAP-40,y:48+r3*5,sx:9+r1*13,sz:5+r2*8,sp:0.5+r3*0.9});
 }
 /* clouds get their own softly-lit cube (white top, pale bottom) */
 const cloudVB=gl.createBuffer();
@@ -911,26 +986,38 @@ const cloudVB=gl.createBuffer();
 function drawSky(cam){
   const t=performance.now()/1000;
   gl.uniform2f(PE.uFogD,800,900); /* sky ignores world fog */
-  /* sun: soft glow (blended, no depth) so it always sits behind the world */
+  gl.uniform1f(PE.uAmb,1);        /* sky objects glow on their own */
   gl.depthMask(false);
   gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
-  const sx=cam[0]+82,sy=cam[1]+62,sz=cam[2]-64;
-  drawBoxA(mMul(mT(sx,sy,sz),mS(22,22,2.0)),'#fff8d0',0.25);
-  drawBoxA(mMul(mT(sx,sy,sz),mS(13,13,2.4)),'#fff3ae',1.0);
+  if(DAYA>0.02){ /* sun */
+    const sx=cam[0]+82,sy=cam[1]+62,sz=cam[2]-64;
+    drawBoxA(mMul(mT(sx,sy,sz),mS(22,22,2.0)),'#fff8d0',0.25*DAYA);
+    drawBoxA(mMul(mT(sx,sy,sz),mS(13,13,2.4)),'#fff3ae',DAYA);
+  }
+  if(NIGHTA>0.02){ /* moon + stars */
+    const mx=cam[0]-70,my=cam[1]+58,mz=cam[2]+62;
+    drawBoxA(mMul(mT(mx,my,mz),mS(16,16,2.0)),'#dfe9ff',0.2*NIGHTA);
+    drawBoxA(mMul(mT(mx,my,mz),mS(9,9,2.2)),'#f3f6ff',0.95*NIGHTA);
+    for(const s of STARS)
+      drawBoxA(mMul(mT(cam[0]+s[0]*150,cam[1]+s[1]*150,cam[2]+s[2]*150),mS(s[3],s[3],s[3])),'#ffffff',0.85*NIGHTA);
+  }
   gl.disable(gl.BLEND);gl.depthMask(true);
-  /* clouds: crisp opaque slabs, softly lit */
+  /* clouds: crisp opaque slabs, softly lit, dimmed after dark */
+  const cAmb=Math.round(clamp(AMB+0.08,0.4,1)*16)/16;
+  const cCol=shade('#fdfeff',cAmb);
   gl.bindBuffer(gl.ARRAY_BUFFER,cloudVB);
   gl.vertexAttribPointer(PE.aP,3,gl.FLOAT,false,16,0);
   gl.vertexAttribPointer(PE.aL,1,gl.FLOAT,false,16,12);
   for(const c of CLOUDS){
-    const cx=((c.x+t*c.sp)%272+272)%272-40;
-    drawBox(mMul(mT(cx,c.y,c.z),mS(c.sx,1.8,c.sz)),'#fdfeff');
-    drawBox(mMul(mT(cx+c.sx*0.15,c.y+1.5,c.z+c.sz*0.08),mS(c.sx*0.55,1.6,c.sz*0.6)),'#fdfeff');
+    const cx=((c.x+t*c.sp)%CWRAP+CWRAP)%CWRAP-40;
+    drawBox(mMul(mT(cx,c.y,c.z),mS(c.sx,1.8,c.sz)),cCol);
+    drawBox(mMul(mT(cx+c.sx*0.15,c.y+1.5,c.z+c.sz*0.08),mS(c.sx*0.55,1.6,c.sz*0.6)),cCol);
   }
   gl.bindBuffer(gl.ARRAY_BUFFER,cubeVB);
   gl.vertexAttribPointer(PE.aP,3,gl.FLOAT,false,16,0);
   gl.vertexAttribPointer(PE.aL,1,gl.FLOAT,false,16,12);
   gl.uniform2f(PE.uFogD,FOGD[0],FOGD[1]);
+  gl.uniform1f(PE.uAmb,AMB);
 }
 /* ---- particles: splashes, sparkles, dust, pollen ---- */
 const PARTS=[];
@@ -963,6 +1050,8 @@ function drawShadow(e){
 }
 
 function renderWorld(pv,cam,fwd,drawEnts){
+  skyTick();
+  gl.clearColor(FOG[0],FOG[1],FOG[2],1);
   gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
   beginEnts(pv,cam);
   drawSky(cam);
@@ -975,6 +1064,7 @@ function renderWorld(pv,cam,fwd,drawEnts){
   gl.uniform1f(PT.uAlpha,1.0);
   gl.uniform1f(PT.uTime,performance.now()/1000);
   gl.uniform1f(PT.uWave,0);
+  gl.uniform1f(PT.uAmb,AMB);
   const vis=[];
   for(const ch of chunks){if(!ch)continue;
     const dx=ch.cx-cam[0],dz=ch.cz-cam[2];
@@ -1001,10 +1091,17 @@ const cam={yaw:0,pitch:0.38,dist:5.5};
 let CAMEYE=[0,0,0],CAMFWD=[0,0,-1];
 const NPCS=[],FLIES=[],COINSE=[],RESPAWN=[];
 
+function ptSolid(px,py,pz){
+  const fx=Math.floor(px),fy=Math.floor(py),fz=Math.floor(pz);
+  const b=gb(fx,fy,fz);
+  if(SOLID.has(b)||b===B.fence)return true;
+  /* fences are 1.6 blocks tall for collision: too tall to auto-hop, jumpable on purpose */
+  if(gb(fx,fy-1,fz)===B.fence&&py-fy<0.6)return true;
+  return false;}
 function boxSolid(e,x,y,z){
   const xs=[x-e.hw,x+e.hw],zs=[z-e.hw,z+e.hw],ys=[y+0.02,y+e.hh*0.5,y+e.hh-0.02];
   for(const yy of ys)for(const xx of xs)for(const zz of zs)
-    if(SOLID.has(gb(Math.floor(xx),Math.floor(yy),Math.floor(zz))))return true;
+    if(ptSolid(xx,yy,zz))return true;
   return false;}
 function moveEntity(e,dt){
   e.inWater=gb(Math.floor(e.x),Math.floor(e.y+0.4),Math.floor(e.z))===B.water;
@@ -1101,6 +1198,45 @@ function drawCritter(e,t){
   if(sp.teeth)part(mT(0,1.1,0.23),0.12,0.1,0.03,'#ffffff');
   if(sp.shell)part(mT(0,0.76,-0.25),0.5,0.46,0.14,'#8a6a3a');
   if(sp.tail)part(mMul(mT(0,0.5,-0.3),mRX(0.6)),0.18,0.1,0.42,sp.dark);
+  /* outfits: hats + neck pieces from Madame Poppy's Boutique */
+  const fit=e===P?SV.outfit:e.outfit;
+  if(fit){
+    switch(fit.hat){
+      case 'crown_flower':
+        part(mT(0,1.52,0.16),0.13,0.11,0.13,'#f25c97');
+        part(mT(0.15,1.52,-0.06),0.13,0.11,0.13,'#ffd23e');
+        part(mT(-0.15,1.52,-0.06),0.13,0.11,0.13,'#ff9cbd');break;
+      case 'hat_lily':
+        part(mT(0,1.53,0),0.62,0.08,0.62,'#4aa832');
+        part(mT(0.16,1.61,0.1),0.15,0.13,0.15,'#f25c97');break;
+      case 'hat_straw':
+        part(mT(0,1.51,0),0.74,0.07,0.74,'#e8cd7a');
+        part(mT(0,1.6,0),0.36,0.17,0.36,'#d9b95c');break;
+      case 'hat_acorn':
+        part(mT(0,1.55,0),0.42,0.18,0.42,'#8a5a2c');
+        part(mT(0,1.69,0),0.1,0.12,0.1,'#6f451f');break;
+      case 'hat_crown':
+        part(mT(0,1.54,0),0.36,0.13,0.36,'#ffd23e');
+        part(mT(0.12,1.65,0),0.07,0.12,0.07,'#ffd23e');
+        part(mT(-0.12,1.65,0),0.07,0.12,0.07,'#ffd23e');
+        part(mT(0,1.66,0),0.08,0.14,0.08,'#ff6f61');break;
+      case 'hat_shroom':
+        part(mT(0,1.56,0),0.58,0.17,0.58,'#e04848');
+        part(mT(0.14,1.66,0.12),0.1,0.05,0.1,'#ffffff');
+        part(mT(-0.15,1.66,-0.1),0.1,0.05,0.1,'#ffffff');break;
+    }
+    switch(fit.neck){
+      case 'neck_scarf':
+        part(mT(0,1.03,0),0.6,0.13,0.5,'#e04848');
+        part(mT(0.17,0.84,0.24),0.13,0.3,0.06,'#e04848');break;
+      case 'neck_shell':
+        part(mT(0,1.05,0.2),0.5,0.04,0.1,'#d9b95c');
+        part(mT(0,0.97,0.24),0.12,0.13,0.06,'#ffb9cf');break;
+      case 'neck_leaf':
+        part(mT(0,0.82,-0.27),0.52,0.55,0.05,'#4aa832');
+        part(mT(0,1.05,-0.2),0.56,0.1,0.12,'#3f8a23');break;
+    }
+  }
   if(e.bang)part(mT(0,1.78+Math.sin(t*3+(e.ph||0))*0.06,0),0.12,0.24,0.12,'#ffd23e');
 }
 function drawCoinEnt(c,t){
@@ -1171,7 +1307,8 @@ const joyEl=$('#joy'),joynEl=$('#joyn');
 const input={jx:0,jy:0};
 let joyTouch=null,lookTouch=null,mouseLook=null;
 const keys={};
-function userGesture(){try{if(actx&&actx.state==='suspended')actx.resume();}catch(e){}}
+function userGesture(){try{if(actx&&actx.state==='suspended')actx.resume();}catch(e){}
+  if(typeof musKick==='function')musKick();}
 
 function inputMove(){
   let x=input.jx,y=input.jy;
@@ -1364,7 +1501,14 @@ function talkTo(n){
 function buildLines(n){
   const ls=[...(n.lines||[])];
   const st=SV.quests[n.id]||0;
-  if(n.quest){
+  if(n.quest&&n.quest.wear){
+    const q=n.quest,dressed=SV.outfit.hat!=='none'||SV.outfit.neck!=='none';
+    if(st===0)ls.push({ask:true,text:q.ask});
+    else if(st===1){
+      if(dressed)ls.push({give:true,text:'Oh! Is that a new look? Give us a twirl!'});
+      else ls.push({text:'The boutique is just east of the fountain — pink roof, can’t miss it!'});
+    }else ls.push({text:'Still the snappiest dresser in Lilyopolis!'});
+  }else if(n.quest){
     const q=n.quest,iname=ITEMS[q.item].name.toLowerCase();
     if(st===0)ls.push({ask:true,text:q.ask});
     else if(st===1){
@@ -1372,6 +1516,7 @@ function buildLines(n){
       else ls.push({text:'Still hunting? I need '+(q.n-invCount(q.item))+' more '+iname+'. You can do it!'});
     }else ls.push({text:'Thanks again, friend! The whole pond appreciates you.'});
   }
+  if(n.shop)ls.push({shop:true,text:'Want to browse the racks, dearie?'});
   if(n.trade){
     const tr=n.trade;
     if(invCount(tr.item)>=tr.n)ls.push({trade:true,text:'Trade '+tr.n+' '+ITEMS[tr.item].name.toLowerCase()+' for '+tr.coins+' coins?'});
@@ -1394,11 +1539,14 @@ function showLine(){
     const n=dialog.npc;
     if(L.ask){dbtn('Sure, I will!',()=>{SV.quests[n.id]=1;save();toast('Quest started!');closeDialog();updateHUD();});
       dbtn('Maybe later',closeDialog,true);}
-    if(L.give){dbtn('Give '+n.quest.n,()=>{
-        SV.inv[n.quest.item]-=n.quest.n;SV.quests[n.id]=2;save();
+    if(L.give){dbtn(n.quest.wear?'Ta-daa!':'Give '+n.quest.n,()=>{
+        if(!n.quest.wear)SV.inv[n.quest.item]-=n.quest.n;
+        SV.quests[n.id]=2;save();
         addCoins(n.quest.coins);
         dialog.lines=[n.quest.thanks];dialog.i=0;showLine();});
       dbtn('Not yet',closeDialog,true);}
+    if(L.shop){dbtn('Browse the racks!',()=>{openShop();});
+      dbtn('Just looking',closeDialog,true);}
     if(L.trade){dbtn('Trade!',()=>{
         SV.inv[n.trade.item]-=n.trade.n;save();addCoins(n.trade.coins);
         dialog.lines=buildLines(n);dialog.i=dialog.lines.length-1;
@@ -1415,6 +1563,37 @@ function dialogNext(){
 }
 function closeDialog(){dialog.npc=null;dlgEl.style.display='none';}
 
+/* ---- Madame Poppy's shop ---- */
+function openShop(){
+  closeDialog();
+  let rows='';
+  for(const it of SHOP_ITEMS){
+    const owned=SV.wardrobe[it.id]||it.cost===0;
+    const worn=SV.outfit[it.slot]===it.id;
+    rows+='<div class="mprow"><span class="who">'+it.name+
+      (it.desc?' <span style="opacity:.6">('+it.desc+')</span>':(it.cost&&!owned?' · '+it.cost+' coins':''))+
+      '</span><button class="shopb" data-id="'+it.id+'" style="background:'+
+      (worn?'linear-gradient(160deg,#b6c3d0,#8295a4)':'linear-gradient(160deg,#7dd13f,#4f9e23)')+'">'+
+      (worn?'Take off':owned?'Wear':'Buy')+'</button></div>';
+  }
+  openModal('<h2>Madame Poppy’s Boutique</h2>'+
+    '<p><img src="'+ICONS.coin+'" style="width:18px;vertical-align:-3px"> '+SV.coins+' coins</p>'+rows,
+    [['Done','gray',closeModal]]);
+  document.querySelectorAll('.shopb').forEach(b=>{
+    b.onclick=()=>{
+      const it=SHOP_ITEMS.find(x=>x.id===b.dataset.id);
+      const owned=SV.wardrobe[it.id]||it.cost===0;
+      if(!owned){
+        if(SV.coins<it.cost){toast('Not enough coins yet — try the Arcade!');sBad();return;}
+        SV.coins-=it.cost;SV.wardrobe[it.id]=1;sCoin();toast(it.name+' is yours!');
+      }
+      SV.outfit[it.slot]=(SV.outfit[it.slot]===it.id)?'none':it.id;
+      save();updateHUD();sTalk();
+      mpSendFit();
+      openShop();
+    };});
+}
+
 /* ---- HUD ---- */
 function updateHUD(){
   $('#coinN').textContent=SV.coins;
@@ -1426,7 +1605,10 @@ function updateHUD(){
     else if(mini.id==='plot')txt='YOUR game! Coins '+mini.count+'/'+mini.total+' — reach the flag!';
   }else{
     for(const n of NPCS){const q=n.quest;
-      if(q&&SV.quests[n.id]===1){txt=n.name+' needs '+ITEMS[q.item].name.toLowerCase()+': '+Math.min(invCount(q.item),q.n)+'/'+q.n;break;}}
+      if(q&&SV.quests[n.id]===1){
+        txt=q.wear?'Wear something from Madame Poppy’s Boutique, then see the Mayor!'
+          :n.name+' needs '+ITEMS[q.item].name.toLowerCase()+': '+Math.min(invCount(q.item),q.n)+'/'+q.n;
+        break;}}
     if(!txt&&!SV.tut)txt='Find Hopper by the fountain road, north of you!';
   }
   const chip=$('#chipObj');
@@ -1435,7 +1617,10 @@ function updateHUD(){
 function updateBangs(){
   for(const n of NPCS){
     const st=SV.quests[n.id]||0;
-    n.bang=!!(n.quest&&(st===0||(st===1&&invCount(n.quest.item)>=n.quest.n)));
+    const done=n.quest&&(n.quest.wear
+      ?(SV.outfit.hat!=='none'||SV.outfit.neck!=='none')
+      :invCount(n.quest.item)>=n.quest.n);
+    n.bang=!!(n.quest&&(st===0||(st===1&&done)));
   }
 }
 
@@ -1594,6 +1779,7 @@ function plotStamp(m,x,z){
   REC.list=null;
   syncPlotEnts();
   markRegion(x-7,z-7,x+7,z+7);
+  scanLanterns();
   sPlace();
   burst(x+0.5,PLOT.g+0.7,z+0.5,10,'#ffffff',2,2,4.5,0.09);
 }
@@ -1614,6 +1800,7 @@ function revertPlacement(i){
   PLACED.splice(i,1);
   if(!MP||MP.role!=='guest'){SV.plot.splice(i,1);saveSoon();}
   syncPlotEnts();
+  scanLanterns();
   markRegion(rec.x-7,rec.z-7,rec.x+7,rec.z+7);
   sBad();
 }
@@ -1806,6 +1993,8 @@ function openPause(){
      [MP?(MP.role==='host'?'Play Together · hosting':'Play Together · visiting'):'Play Together','blue',()=>{closeModal();mpPanel();}],
      ['How to play','blue',openHelp],
      [SV.sound?'Sound: ON':'Sound: OFF','purple',()=>{SV.sound=!SV.sound;save();closeModal();openPause();}],
+     [SV.music?'Music: ON':'Music: OFF','purple',()=>{SV.music=!SV.music;save();
+        if(SV.music)musStart();else musStop();closeModal();openPause();}],
      [SV.mode==='maker'?'Maker Mode: ON':'Maker Mode: OFF','purple',()=>{
         SV.mode=SV.mode==='maker'?'explore':'maker';save();applyMode();closeModal();
         toast(SV.mode==='maker'?'Maker Mode ON — visit Maker Isle!':'Maker Mode off');openPause();}],
@@ -1869,6 +2058,7 @@ function boot(){
     $('#loading .t').textContent='Hopping to your friend’s pond…';
     mpJoinBoot(JSON.parse(mj).code).then(()=>{
       buildAllChunks();
+      scanLanterns();
       syncPlotEnts();
       updateHUD();
       $('#loading').style.display='none';
@@ -1884,6 +2074,7 @@ function boot(){
   }
   rebuildPlot();
   buildAllChunks();
+  scanLanterns();
   spawnNPCs();
   syncPlotEnts();
   applyMode();
@@ -1919,11 +2110,13 @@ function frame(now){
   frame._pol=(frame._pol||0)+dt;
   if(frame._pol>0.5){frame._pol=0;
     const bio=bioMap[Math.floor(P.z)*W+Math.floor(P.x)];
-    if((bio===0||bio===1)&&PARTS.length<120){
+    const night=NIGHTA>0.4;
+    if((bio===0||bio===1||(night&&bio===2))&&PARTS.length<120){
       const a=Math.random()*Math.PI*2,r=3+Math.random()*7;
       const px2=P.x+Math.sin(a)*r,pz2=P.z+Math.cos(a)*r;
+      /* daytime pollen motes become fireflies after dark */
       spawnPart(px2,groundY(px2,pz2)+0.8+Math.random()*1.6,pz2,
-        0.25,0.12,0.18,4+Math.random()*3,'#fff6c0',0.05,0);}}
+        0.25,0.12,0.18,4+Math.random()*3,night?'#d8ff6e':'#fff6c0',night?0.08:0.05,0);}}
   updateParts(dt);
   abtnsEl.classList.toggle('dim',P.moving&&!modalOpen&&!dialog.npc);
   for(const n of NPCS)if(Math.hypot(n.x-P.x,n.z-P.z)<48)updateNPC(n,dt);
@@ -1931,7 +2124,7 @@ function frame(now){
   remeshDirty(3);
   const c=cameraEye();
   CAMEYE=c.eye;CAMFWD=c.fwd;
-  const proj=mPersp(FOVY,canvas.width/canvas.height,0.1,180);
+  const proj=mPersp(FOVY,canvas.width/canvas.height,0.1,320);
   const view=mLook(c.eye[0],c.eye[1],c.eye[2],c.tgt[0],c.tgt[1],c.tgt[2]);
   const pv=mMul(proj,view);
   renderWorld(pv,c.eye,c.fwd,()=>{
@@ -1941,10 +2134,19 @@ function frame(now){
     for(const r of REMOTES.values())drawCritter(r,t);
     for(const c2 of COINSE)if(!c2.got)drawCoinEnt(c2,t);
     for(const f of FLIES)if(!f.got)drawFly(f,t);
-    /* particles + blob shadows (soft, blended) */
+    /* particles + lantern glow + blob shadows (soft, blended) */
     gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
     gl.depthMask(false);
     drawParts();
+    if(NIGHTA>0.05){ /* lanterns wake up after dark */
+      gl.uniform1f(PE.uAmb,1);
+      for(const ln of LANTERNS){
+        if(Math.hypot(ln[0]-P.x,ln[2]-P.z)>70)continue;
+        drawBoxA(mMul(mT(ln[0],ln[1],ln[2]),mS(2.3,2.3,2.3)),'#ffc95e',0.15*NIGHTA);
+        drawBoxA(mMul(mT(ln[0],ln[1],ln[2]),mS(1.25,1.25,1.25)),'#ffe6a8',0.3*NIGHTA);
+      }
+      gl.uniform1f(PE.uAmb,AMB);
+    }
     drawShadow(P);
     for(const n of NPCS)if(Math.hypot(n.x-P.x,n.z-P.z)<40)drawShadow(n);
     for(const r of REMOTES.values())drawShadow(r);
@@ -2127,6 +2329,9 @@ function mpOnMsg(peer,m){
     if(tag==='p'){peer.p=[m[1],m[2],m[3],m[4],m[5]];mpRemoteSet(peer.uid,peer.info,peer.p);}
     else if(tag==='reqE')edit(m[1],m[2],m[3],m[4]);
     else if(tag==='em'){mpRemoteEmote(peer.uid,m[2]);mpBroadcast(['em',peer.uid,m[2]]);}
+    else if(tag==='fit'){peer.info.hat=m[2];peer.info.neck=m[3];
+      const r=REMOTES.get(peer.uid);if(r)r.outfit={hat:m[2],neck:m[3]};
+      mpBroadcast(['fit',peer.uid,m[2],m[3]]);}
     else if(tag==='plot'){
       if(MP.allowBuild){const md=MODELS.find(mm=>mm.id===m[1]);
         if(md&&!md.tool)placeModel(md,m[2],m[3]);}
@@ -2145,10 +2350,14 @@ function mpOnMsg(peer,m){
     }
     else if(tag==='e'){MP_APPLYING=true;edit(m[1],m[2],m[3],m[4]);MP_APPLYING=false;}
     else if(tag==='em'){if(m[1]!==fbA.uid)mpRemoteEmote(m[1],m[2]);}
+    else if(tag==='fit'){if(m[1]!==fbA.uid){
+      if(MP.playersInfo[m[1]])Object.assign(MP.playersInfo[m[1]],{hat:m[2],neck:m[3]});
+      if(m[1]===MP.hostUid&&MP.hostInfo)Object.assign(MP.hostInfo,{hat:m[2],neck:m[3]});
+      const r=REMOTES.get(m[1]);if(r)r.outfit={hat:m[2],neck:m[3]};}}
     else if(tag==='plotOk'){MP_APPLYING=true;plotStamp(m[1],m[2],m[3]);MP_APPLYING=false;}
     else if(tag==='plotDel'){MP_APPLYING=true;revertPlacement(m[1]);MP_APPLYING=false;}
     else if(tag==='build'){MP.allowBuild=!!m[1];toast(MP.allowBuild?'The host turned ON friend building!':'Friend building is off right now.');}
-    else if(tag==='pj'){if(m[1]!==fbA.uid){MP.playersInfo[m[1]]={name:m[2],critter:m[3]};toast(m[2]+' hopped in!');sPick();}}
+    else if(tag==='pj'){if(m[1]!==fbA.uid){MP.playersInfo[m[1]]={name:m[2],critter:m[3],hat:m[4],neck:m[5]};toast(m[2]+' hopped in!');sPick();}}
     else if(tag==='drop'){mpRemoteGone(m[1]);delete MP.playersInfo[m[1]];}
     else if(tag==='kick')mpLeave('The host ended your visit.');
     else if(tag==='closed')mpLeave('The host closed the pond.');
@@ -2160,7 +2369,8 @@ async function mpHost(){
   try{
     await fbAuth();
     const code=mpMakeCode();
-    await fbSet('rooms/'+code,{host:{uid:fbA.uid,t:Date.now(),name:mpMyName(),critter:SV.critter},locked:false});
+    await fbSet('rooms/'+code,{host:{uid:fbA.uid,t:Date.now(),name:mpMyName(),critter:SV.critter,
+      hat:SV.outfit.hat,neck:SV.outfit.neck},locked:false});
     MP={role:'host',code,peers:new Map(),blocked:new Set(),knockQ:[],knockCur:null,
         locked:false,allowBuild:false,relaySeq:0,relayEv:[],sigSeen:new Set(),
         lastPosSend:0,lastRelaySend:0,panelOpen:false,stream:null,hb:null};
@@ -2184,7 +2394,8 @@ function mpHostRoom(tree){
     if(uid===fbA.uid||MP.peers.has(uid)||MP.blocked.has(uid))continue;
     if(MP.knockCur===uid||MP.knockQ.some(k=>k.uid===uid))continue;
     const k=ks[uid]||{};
-    MP.knockQ.push({uid,name:String(k.name||'A critter').slice(0,20),critter:SPECIES[k.critter]?k.critter:'frog'});
+    MP.knockQ.push({uid,name:String(k.name||'A critter').slice(0,20),critter:SPECIES[k.critter]?k.critter:'frog',
+      hat:String(k.hat||'none'),neck:String(k.neck||'none')});
     sTalk();
     mpMaybeShowKnock();
   }
@@ -2216,7 +2427,7 @@ function mpMaybeShowKnock(){
      ['Not now','gray',()=>{MP.knockCur=null;MP.blocked.add(k.uid);fbDel('rooms/'+MP.code+'/knocks/'+k.uid).catch(()=>{});closeModal();}]]);
 }
 async function mpApprove(k){
-  const peer=mkPeer(k.uid,{name:k.name,critter:k.critter},true);
+  const peer=mkPeer(k.uid,{name:k.name,critter:k.critter,hat:k.hat,neck:k.neck},true);
   MP.peers.set(k.uid,peer);
   try{
     await fbSet('rooms/'+MP.code+'/players/'+k.uid,{ok:1,name:k.name,critter:k.critter});
@@ -2229,11 +2440,12 @@ function mpPeerReady(peer){
   clearTimeout(peer.fallbackT);
   peer.ready=true;
   const edits=[];JOURNAL.forEach((b,key)=>{const p=key.split(',');edits.push([+p[0],+p[1],+p[2],b]);});
-  const players=[[fbA.uid,mpMyName(),SV.critter]];
-  for(const p of MP.peers.values())if(p!==peer&&p.ready)players.push([p.uid,p.info.name,p.info.critter]);
+  const players=[[fbA.uid,mpMyName(),SV.critter,SV.outfit.hat,SV.outfit.neck]];
+  for(const p of MP.peers.values())if(p!==peer&&p.ready)players.push([p.uid,p.info.name,p.info.critter,p.info.hat,p.info.neck]);
   fbSet('rooms/'+MP.code+'/players/'+peer.uid+'/init',
-    {edits,plot:PLACED.map(p=>[p.m,p.x,p.z]),players,build:MP.allowBuild?1:0}).catch(()=>{});
-  mpBroadcast(['pj',peer.uid,peer.info.name,peer.info.critter]);
+    {edits,plot:PLACED.map(p=>[p.m,p.x,p.z]),players,build:MP.allowBuild?1:0,
+     tod:new Date().getHours()+new Date().getMinutes()/60}).catch(()=>{});
+  mpBroadcast(['pj',peer.uid,peer.info.name,peer.info.critter,peer.info.hat,peer.info.neck]);
   toast(peer.info.name+' hopped in!');sPick();
   mpUIStart();
   if(MP.panelOpen)mpPanel();
@@ -2291,7 +2503,8 @@ async function mpJoinBoot(code){
   MP={role:'guest',code,peer:null,hostUid:null,hostInfo:null,playersInfo:{},sigSeen:new Set(),
       approved:false,initDone:false,pending:[],allowBuild:false,lastHostSeq:0,relT:0,
       outSeq:0,outEv:[],lastPosSend:0,lastRelaySend:0,lastHostMsg:Date.now(),knockT:Date.now(),stream:null};
-  await fbSet('rooms/'+code+'/knocks/'+fbA.uid,{name:mpMyName(),critter:SV.critter,t:Date.now()});
+  await fbSet('rooms/'+code+'/knocks/'+fbA.uid,{name:mpMyName(),critter:SV.critter,
+    hat:SV.outfit.hat,neck:SV.outfit.neck,t:Date.now()});
   MP.stream=fbStream('rooms/'+code,t=>mpGuestRoom(t));
   await new Promise((res,rej)=>{
     MP.joinRes=res;MP.joinRej=rej;
@@ -2311,7 +2524,8 @@ function mpGuestRoom(tree){
   }
   if(tree.host&&!MP.hostInfo){
     MP.hostUid=tree.host.uid;
-    MP.hostInfo={name:tree.host.name||'Host',critter:SPECIES[tree.host.critter]?tree.host.critter:'frog'};
+    MP.hostInfo={name:tree.host.name||'Host',critter:SPECIES[tree.host.critter]?tree.host.critter:'frog',
+      hat:tree.host.hat||'none',neck:tree.host.neck||'none'};
   }
   const me=(tree.players||{})[fbA.uid];
   if(!MP.approved){
@@ -2346,8 +2560,12 @@ function mpApplyInit(init){
     for(const p of (init.plot||[]))plotStamp(p[0],p[1],p[2]);
     for(const e of (init.edits||[]))edit(e[0],e[1],e[2],e[3]);
   }finally{MP_APPLYING=false;SV.sound=s0;}
-  for(const pl of (init.players||[]))if(pl[0]!==fbA.uid)MP.playersInfo[pl[0]]={name:pl[1],critter:pl[2]};
+  for(const pl of (init.players||[]))if(pl[0]!==fbA.uid)MP.playersInfo[pl[0]]={name:pl[1],critter:pl[2],hat:pl[3],neck:pl[4]};
   MP.allowBuild=!!init.build;
+  if(typeof init.tod==='number'){
+    const d=new Date();
+    MP.todOff=init.tod-(d.getHours()+d.getMinutes()/60);
+  }
   MP.initDone=true;
   const pend=MP.pending;MP.pending=[];
   for(const m of pend)mpOnMsg(MP.peer,m);
@@ -2390,6 +2608,7 @@ function mpRemoteSet(uid,info,p){
   let r=REMOTES.get(uid);
   if(!r){
     r={uid,sp:(info&&SPECIES[info.critter])?info.critter:'frog',name:(info&&info.name)||'Pal',
+       outfit:{hat:(info&&info.hat)||'none',neck:(info&&info.neck)||'none'},
        x:p[0],y:p[1],z:p[2],yaw:p[3]||0,tx:p[0],ty:p[1],tz:p[2],tyaw:p[3]||0,
        moving:false,ph:Math.random()*7,emote:null,emoteT:0};
     REMOTES.set(uid,r);
@@ -2416,6 +2635,11 @@ function mpEmoteBar(){
       bar.appendChild(b);});
   }
   bar.style.display='flex';
+}
+function mpSendFit(){
+  if(!MP)return;
+  if(MP.role==='host')mpBroadcast(['fit',fbA.uid,SV.outfit.hat,SV.outfit.neck]);
+  else mpSend(['fit',fbA.uid,SV.outfit.hat,SV.outfit.neck]);
 }
 function mpEmote(i){
   OWN_EMOTE={txt:MP_EMOTES[i],until:performance.now()+3000};
@@ -2544,6 +2768,242 @@ function mpTick(dt,t,pv){
 }
 bindBtn($('#btnSay'),mpEmoteBar);
 bindBtn($('#chipMP'),()=>mpPanel());
+
+/* ========== 10. music — a living soundtrack on the pond's real clock ==========
+   Two songbooks, entirely synthesized (no files):
+   - "wave": peaceful synthwave — detuned saw pads through a swept lowpass,
+     sine sub-bass, sparse triangle lead, generous reverb + tempo-synced echo.
+   - "chip": friendly chiptune — square lead, triangle arps, pulse bass,
+     noise percussion, light echo.
+   Each track is a deterministic composition: a seeded 2-bar motif transposed
+   through its chord progression, so every track always plays the same tune.
+   The playlist follows the time of day (morning/day/evening/night). */
+const MUS={playing:false,bus:null,verb:null,verbIn:null,delay:null,delayIn:null,
+  noiseBuf:null,timer:null,tr:null,tg:null,leadOut:null,padOut:null,dryOut:null,
+  step:0,nextT:0,spb:0,motif:null,lastId:null,vol:0.24};
+const MODE_MAJ=[0,2,4,5,7,9,11],MODE_MIN=[0,2,3,5,7,8,10];
+const TRACKS=[
+  {id:'s1',name:'Sunrise Pond',   style:'wave',bpm:80, root:48,maj:true, prog:[0,4,5,3],when:['morning','day'],    drums:false,leadDen:0.5, seed:11},
+  {id:'s2',name:'Lily Drift',     style:'wave',bpm:74, root:45,maj:false,prog:[0,5,2,6],when:['day'],              drums:false,leadDen:0.42,seed:22},
+  {id:'s3',name:'Golden Hour',    style:'wave',bpm:86, root:53,maj:true, prog:[0,1,4,0],when:['day','evening'],    drums:true, leadDen:0.5, seed:33},
+  {id:'s4',name:'Firefly Glow',   style:'wave',bpm:68, root:50,maj:false,prog:[0,3,5,4],when:['evening','night'],  drums:false,leadDen:0.4, seed:44},
+  {id:'s5',name:'Moonlit Ripples',style:'wave',bpm:60, root:45,maj:false,prog:[0,2,5,6],when:['night'],            drums:false,leadDen:0.3, seed:55},
+  {id:'c1',name:'Hop Hop Morning',style:'chip',bpm:126,root:60,maj:true, prog:[0,3,4,0],when:['morning','day'],    drums:true, leadDen:0.55,seed:66},
+  {id:'c2',name:'Puddle Jumper',  style:'chip',bpm:138,root:55,maj:true, prog:[0,5,3,4],when:['day'],              drums:true, leadDen:0.55,seed:77},
+  {id:'c3',name:'Berry Bounce',   style:'chip',bpm:132,root:53,maj:true, prog:[0,3,0,4],when:['morning','day'],    drums:true, leadDen:0.55,seed:88},
+  {id:'c4',name:'Arcade Plaza',   style:'chip',bpm:148,root:57,maj:false,prog:[0,6,5,4],when:['day','evening'],    drums:true, leadDen:0.6, seed:99},
+  {id:'c5',name:'Tadpole Lullaby',style:'chip',bpm:92, root:60,maj:true, prog:[0,5,3,4],when:['evening','night'],  drums:false,leadDen:0.45,seed:123,soft:true},
+];
+function musDaypart(){const h=todNow();
+  return h>=5.5&&h<9.5?'morning':h>=9.5&&h<16.5?'day':h>=16.5&&h<20.5?'evening':'night';}
+function rng32(seed){let st=seed|0;return()=>{st=st+0x6D2B79F5|0;
+  let t=Math.imul(st^st>>>15,1|st);t=t+Math.imul(t^t>>>7,61|t)^t;
+  return((t^t>>>14)>>>0)/4294967296;};}
+function scaleAt(tr,k){const m=tr.maj?MODE_MAJ:MODE_MIN;
+  return tr.root+m[((k%7)+7)%7]+12*Math.floor(k/7);}
+const mFreq=m=>440*Math.pow(2,(m-69)/12);
+function genMotif(tr){
+  const r=rng32(tr.seed);
+  const pent=tr.maj?[0,2,4,7,9]:[0,3,5,7,10];
+  const map=new Array(32).fill(null);
+  let deg=2+Math.floor(r()*2),step=0;
+  const den=tr.leadDen||0.45;
+  while(step<32){
+    const strong=step%8===0;
+    if(r()<(strong?den+0.35:den)){
+      const mv=r();
+      deg+=mv<0.4?1:mv<0.8?-1:(r()<0.5?2:-2);
+      deg=clamp(deg,0,7);
+      const len=tr.style==='chip'?(r()<0.6?1:2):(r()<0.5?2:(r()<0.8?4:6));
+      map[step]={semi:pent[deg%5]+12*Math.floor(deg/5),len};
+      step+=len;
+    }else step+=tr.style==='chip'?1:2;
+  }
+  return map;
+}
+function musEnsure(){
+  if(MUS.bus)return;
+  try{actx=actx||new (window.AudioContext||window.webkitAudioContext)();}catch(e){return;}
+  MUS.bus=actx.createGain();MUS.bus.gain.value=MUS.vol;MUS.bus.connect(actx.destination);
+  /* generated hall reverb */
+  const len=Math.floor(actx.sampleRate*2.4);
+  const imp=actx.createBuffer(2,len,actx.sampleRate);
+  for(let ch=0;ch<2;ch++){const d=imp.getChannelData(ch);
+    for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/len,2.6);}
+  MUS.verb=actx.createConvolver();MUS.verb.buffer=imp;
+  MUS.verbIn=actx.createGain();MUS.verbIn.gain.value=1;
+  MUS.verbIn.connect(MUS.verb);MUS.verb.connect(MUS.bus);
+  /* tempo-synced feedback echo */
+  MUS.delay=actx.createDelay(1.2);
+  const fb=actx.createGain();fb.gain.value=0.32;
+  const dLP=actx.createBiquadFilter();dLP.type='lowpass';dLP.frequency.value=2600;
+  MUS.delay.connect(dLP);dLP.connect(fb);fb.connect(MUS.delay);
+  MUS.delayIn=actx.createGain();MUS.delayIn.connect(MUS.delay);dLP.connect(MUS.bus);
+  /* shared noise buffer for percussion */
+  const nb=actx.createBuffer(1,actx.sampleRate,actx.sampleRate);
+  const nd=nb.getChannelData(0);
+  for(let i=0;i<nd.length;i++)nd[i]=Math.random()*2-1;
+  MUS.noiseBuf=nb;
+}
+function mOsc(type,midi,t0,dur,g,dest,det,slideTo){
+  const o=actx.createOscillator(),ga=actx.createGain();
+  o.type=type;o.frequency.setValueAtTime(mFreq(midi),t0);
+  if(slideTo)o.frequency.exponentialRampToValueAtTime(mFreq(slideTo),t0+dur);
+  if(det)o.detune.value=det;
+  ga.gain.setValueAtTime(0.0001,t0);
+  ga.gain.linearRampToValueAtTime(g,t0+Math.min(0.03,dur*0.25));
+  ga.gain.setValueAtTime(g,t0+dur*0.65);
+  ga.gain.exponentialRampToValueAtTime(0.0001,t0+dur);
+  o.connect(ga);ga.connect(dest);
+  o.start(t0);o.stop(t0+dur+0.05);
+}
+function mPad(midi,t0,dur,g,dest){
+  const f=actx.createBiquadFilter();f.type='lowpass';f.Q.value=0.8;
+  f.frequency.setValueAtTime(500,t0);
+  f.frequency.linearRampToValueAtTime(1900,t0+dur*0.55);
+  f.frequency.linearRampToValueAtTime(700,t0+dur);
+  const ga=actx.createGain();
+  ga.gain.setValueAtTime(0.0001,t0);
+  ga.gain.linearRampToValueAtTime(g,t0+dur*0.3);
+  ga.gain.setValueAtTime(g,t0+dur*0.75);
+  ga.gain.linearRampToValueAtTime(0.0001,t0+dur+0.7);
+  for(const det of [-6,6]){
+    const o=actx.createOscillator();o.type='sawtooth';
+    o.frequency.value=mFreq(midi);o.detune.value=det;
+    o.connect(f);o.start(t0);o.stop(t0+dur+0.8);
+  }
+  f.connect(ga);ga.connect(dest);
+}
+function mHit(t0,dur,g,fLo,fHi,dest){
+  const src=actx.createBufferSource();src.buffer=MUS.noiseBuf;
+  src.loop=true;src.loopStart=Math.random();
+  const f=actx.createBiquadFilter();f.type='bandpass';
+  f.frequency.value=(fLo+fHi)/2;f.Q.value=0.7;
+  const ga=actx.createGain();
+  ga.gain.setValueAtTime(g,t0);
+  ga.gain.exponentialRampToValueAtTime(0.0001,t0+dur);
+  src.connect(f);f.connect(ga);ga.connect(dest);
+  src.start(t0);src.stop(t0+dur+0.02);
+}
+function mKick(t0,g,dest){
+  const o=actx.createOscillator(),ga=actx.createGain();
+  o.type='sine';
+  o.frequency.setValueAtTime(110,t0);
+  o.frequency.exponentialRampToValueAtTime(42,t0+0.1);
+  ga.gain.setValueAtTime(g,t0);
+  ga.gain.exponentialRampToValueAtTime(0.0001,t0+0.14);
+  o.connect(ga);ga.connect(dest);o.start(t0);o.stop(t0+0.16);
+}
+function musSetTrack(tr,tStart){
+  if(MUS.tg){ /* fade the previous track; its reverb tail rings out */
+    const old=MUS.tg;
+    old.gain.setValueAtTime(old.gain.value,tStart);
+    old.gain.linearRampToValueAtTime(0,tStart+2.2);
+    setTimeout(()=>{try{old.disconnect();}catch(e){}},5000);
+  }
+  MUS.tr=tr;MUS.lastId=tr.id;
+  MUS.spb=60/tr.bpm/4;
+  MUS.motif=genMotif(tr);
+  MUS.step=0;
+  MUS.tg=actx.createGain();
+  MUS.tg.gain.setValueAtTime(0,tStart);
+  MUS.tg.gain.linearRampToValueAtTime(1,tStart+1.6);
+  MUS.tg.connect(MUS.bus);
+  MUS.dryOut=actx.createGain();MUS.dryOut.connect(MUS.tg);
+  MUS.padOut=actx.createGain();MUS.padOut.connect(MUS.tg);
+  MUS.leadOut=actx.createGain();MUS.leadOut.connect(MUS.tg);
+  const vSend=actx.createGain(),dSend=actx.createGain();
+  vSend.gain.value=tr.style==='wave'?0.45:0.14;
+  dSend.gain.value=tr.style==='wave'?0.4:0.22;
+  MUS.padOut.connect(vSend);MUS.leadOut.connect(vSend);vSend.connect(MUS.verbIn);
+  MUS.leadOut.connect(dSend);dSend.connect(MUS.delayIn);
+  MUS.delay.delayTime.setValueAtTime(MUS.spb*3,tStart);
+}
+function musPickNext(){
+  const part=musDaypart();
+  let pool=TRACKS.filter(t=>t.when.indexOf(part)>=0&&t.id!==MUS.lastId);
+  if(!pool.length)pool=TRACKS.filter(t=>t.when.indexOf(part)>=0);
+  return pool[Math.floor(Math.random()*pool.length)];
+}
+const TRACK_BARS=40;
+function musSched(g,t0){
+  const tr=MUS.tr,spb=MUS.spb,bar=Math.floor(g/16),st=g%16;
+  const deg=tr.prog[bar%tr.prog.length];
+  const cRoot=scaleAt(tr,deg);
+  const chord=[cRoot,scaleAt(tr,deg+2),scaleAt(tr,deg+4)];
+  if(tr.style==='wave'){
+    if(st===0){
+      const dur=spb*16;
+      mPad(chord[0]+12,t0,dur,0.055,MUS.padOut);
+      mPad(chord[1]+12,t0,dur,0.045,MUS.padOut);
+      mPad(chord[2]+12,t0,dur,0.045,MUS.padOut);
+      if(bar%2===1)mPad(scaleAt(tr,deg+6)+12,t0,dur,0.03,MUS.padOut);
+    }
+    if(st===0||st===8)
+      mOsc('sine',cRoot-12,t0,spb*7.6,0.1,MUS.dryOut);
+    if(bar%4===3&&st===12)
+      mOsc('sine',chord[2]-12,t0,spb*3.6,0.08,MUS.dryOut);
+    const ev=MUS.motif[g%32];
+    if(ev)mOsc('triangle',cRoot+12+ev.semi,t0,spb*ev.len*0.92,0.05,MUS.leadOut);
+    if((g*2654435761>>>13)%100<8)
+      mOsc('sine',cRoot+36+[0,2,4,7,9][(g>>2)%5],t0,spb*1.6,0.016,MUS.leadOut);
+    if(tr.drums){
+      if(st===0||st===8)mKick(t0,0.1,MUS.dryOut);
+      if(st===2||st===6||st===10||st===14)mHit(t0,0.05,0.012,6000,9000,MUS.dryOut);
+    }
+  }else{ /* chip */
+    const ev=MUS.motif[g%32];
+    if(ev)mOsc(tr.soft?'triangle':'square',cRoot+12+ev.semi,t0,spb*ev.len*0.85,tr.soft?0.07:0.055,MUS.leadOut);
+    if(st%4===0){
+      const bp=[0,7,12,7][(st/4)|0];
+      mOsc('triangle',cRoot-12+bp,t0,spb*1.6,0.1,MUS.dryOut);
+    }
+    if(!tr.soft&&st%2===1)
+      mOsc('triangle',chord[(st>>1)%3]+24,t0,spb*0.8,0.024,MUS.leadOut);
+    if(tr.drums){
+      if(st===0||(st===10&&bar%2===1))mKick(t0,0.09,MUS.dryOut);
+      if(st===4||st===12)mHit(t0,0.07,0.035,3000,6500,MUS.dryOut);
+      if(st%2===0)mHit(t0,0.03,0.008,8000,11000,MUS.dryOut);
+    }
+  }
+}
+function musTick(){
+  if(!MUS.playing||!actx)return;
+  const ahead=actx.currentTime+0.35;
+  while(MUS.nextT<ahead){
+    if(MUS.step>=TRACK_BARS*16){
+      musSetTrack(musPickNext(),MUS.nextT);
+    }
+    musSched(MUS.step,MUS.nextT);
+    MUS.step++;
+    MUS.nextT+=MUS.spb;
+  }
+}
+function musStart(){
+  musEnsure();
+  if(!MUS.bus||MUS.playing)return;
+  try{if(actx.state==='suspended')actx.resume();}catch(e){}
+  MUS.playing=true;
+  musSetTrack(musPickNext(),actx.currentTime+0.1);
+  MUS.nextT=actx.currentTime+0.15;
+  MUS.timer=setInterval(musTick,90);
+}
+function musStop(){
+  MUS.playing=false;
+  if(MUS.timer){clearInterval(MUS.timer);MUS.timer=null;}
+  if(MUS.tg){const old=MUS.tg;
+    try{old.gain.linearRampToValueAtTime(0,actx.currentTime+1);}catch(e){}
+    setTimeout(()=>{try{old.disconnect();}catch(e){}},2500);
+    MUS.tg=null;}
+}
+function musKick(){if(SV.music&&!MUS.playing)musStart();}
+document.addEventListener('visibilitychange',()=>{
+  if(!MUS.bus)return;
+  try{
+    if(document.hidden)MUS.bus.gain.setValueAtTime(0,actx.currentTime);
+    else MUS.bus.gain.setValueAtTime(MUS.playing?MUS.vol:0,actx.currentTime);
+  }catch(e){}
+});
 
 /* let the loading screen paint, then build the world */
 setTimeout(boot,60);
