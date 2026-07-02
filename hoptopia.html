@@ -294,13 +294,14 @@ const clamp=(v,a,b)=>v<a?a:v>b?b:v;
 const lerp=(a,b,t)=>a+(b-a)*t;
 const dist2=(ax,az,bx,bz)=>Math.hypot(ax-bx,az-bz);
 
-const HOP_BUILD='7.03';
+const HOP_BUILD='7.04';
 let GFXPOLY=false; /* 'Smooth' graphics prototype (low-poly terrain + flat colors) */
 const SAVE_KEY='hoptopia1';
 const DEF_SAVE={started:false,critter:'frog',mode:'',coins:0,inv:{},quests:{},best:{},plot:[],pos:null,sound:true,music:true,tut:false,outfit:{hat:'none',neck:'none'},wardrobe:{}};
 let SV=loadSave();
 SV.q2=SV.q2||{};SV.q2p=SV.q2p||{};
 SV.fish=SV.fish||{};SV.fishBag=SV.fishBag||{};SV.bugs=SV.bugs||{};SV.tools=SV.tools||{};SV.dexRw=SV.dexRw||{};
+SV.bugBag=SV.bugBag||{};SV.pet=SV.pet||null;
 GFXPOLY=SV.gfx?SV.gfx==='poly':true;
 if(new URLSearchParams(location.search).has('poly'))GFXPOLY=true;
 if(new URLSearchParams(location.search).has('blocky'))GFXPOLY=false;
@@ -340,17 +341,17 @@ function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show'
 /* ========== 2. blocks + procedural texture atlas ========== */
 const B={air:0,grass:1,dirt:2,sand:3,stone:4,water:5,lily:6,reed:7,wood:8,leaf:9,stem:10,capR:11,capP:12,
   flowP:13,flowY:14,berry:15,stick:16,pebble:17,shell:18,mud:19,plank:20,roofP:21,roofB:22,path:23,
-  lantern:24,fence:25,flag:26,shroom:27,padB:28,padR:29,padY:30};
+  lantern:24,fence:25,flag:26,shroom:27,padB:28,padR:29,padY:30,bounce:31,tele:32};
 const CROSS=new Set([B.reed,B.flowP,B.flowY,B.berry,B.stick,B.pebble,B.shell,B.fence,B.flag,B.shroom]);
 const SOLID=new Set([B.grass,B.dirt,B.sand,B.stone,B.lily,B.wood,B.leaf,B.stem,B.capR,B.capP,B.mud,
-  B.plank,B.roofP,B.roofB,B.path,B.lantern,B.padB,B.padR,B.padY]);
+  B.plank,B.roofP,B.roofB,B.path,B.lantern,B.padB,B.padR,B.padY,B.bounce,B.tele]);
 const COLLECT={};
 COLLECT[B.flowP]='flower';COLLECT[B.flowY]='flower';COLLECT[B.berry]='berry';COLLECT[B.stick]='stick';
 COLLECT[B.pebble]='pebble';COLLECT[B.shell]='shell';COLLECT[B.reed]='reed';COLLECT[B.shroom]='mushroom';
 const T={grassTop:1,grassSide:2,dirt:3,sand:4,stone:5,water:6,lilyTop:7,lilySide:8,reed:9,woodSide:10,
   woodTop:11,leaf:12,stem:13,capR:14,capP:15,flowP:16,flowY:17,berry:18,stick:19,pebble:20,shell:21,
   mud:22,plank:23,roofP:24,roofB:25,path:26,lantern:27,fence:28,flag:29,shroom:30,coin:31,padB:32,padR:33,padY:34,foam:35,
-  cPink:36,cYellow:37,cStem:38,cLeaf2:39,cBark:40,cRed:41,cWhite:42,cGray:43,cShell:44};
+  cPink:36,cYellow:37,cStem:38,cLeaf2:39,cBark:40,cRed:41,cWhite:42,cGray:43,cShell:44,bounce:45,tele:46};
 const ITEMS={flower:{name:'Flowers',tile:T.flowP},berry:{name:'Berries',tile:T.berry},
   stick:{name:'Sticks',tile:T.stick},pebble:{name:'Pebbles',tile:T.pebble},shell:{name:'Shells',tile:T.shell},
   reed:{name:'Reeds',tile:T.reed},mushroom:{name:'Mushrooms',tile:T.shroom}};
@@ -367,6 +368,7 @@ function tileFor(b,f){ /* f: 0 top, 1 side, 2 bottom */
     case B.path:return T.path; case B.lantern:return T.lantern; case B.fence:return T.fence;
     case B.flag:return T.flag; case B.shroom:return T.shroom;
     case B.padB:return T.padB; case B.padR:return T.padR; case B.padY:return T.padY;
+    case B.bounce:return T.bounce; case B.tele:return T.tele;
   } return T.stone;
 }
 
@@ -428,6 +430,8 @@ tdraw(T.cRed,()=>px(0,0,16,16,'#e04848'));
 tdraw(T.cWhite,()=>px(0,0,16,16,'#f2efe4'));
 tdraw(T.cGray,()=>px(0,0,16,16,'#aab4bc'));
 tdraw(T.cShell,()=>px(0,0,16,16,'#ffb9cf'));
+tdraw(T.bounce,()=>{speck('#ff6f9c',.07);px(3,3,3,3,'#fff');px(10,5,3,3,'#fff');px(6,10,3,3,'#fff');px(12,11,2,2,'#fff');});
+tdraw(T.tele,()=>{speck('#8a52e6',.08);px(4,4,8,8,'#c9a8ff');px(6,6,4,4,'#5e2aa0');px(7,7,2,2,'#ffffff');});
 tdraw(T.foam,()=>{ /* shoreline foam: broken white dashes on transparent */
   px(0,6,4,3,'rgba(255,255,255,.85)');px(6,5,3,3,'rgba(255,255,255,.75)');
   px(11,7,4,2,'rgba(255,255,255,.85)');px(3,10,3,2,'rgba(255,255,255,.6)');
@@ -718,6 +722,7 @@ const MINI={
   hop:{name:'Lily Hop',pad:null,desc:'Hop across the lily pads to the flag! Fall in the water and you restart at your last checkpoint.',reward:15,again:5},
   berry:{name:'Berry Scramble',pad:null,desc:'Pick 12 berries in the walled garden before the timer runs out!',time:60,goal:12,reward:12,again:5},
   firefly:{name:'Firefly Chase',pad:null,desc:'Catch 8 zippy fireflies around Arcade Plaza!',time:90,goal:8,reward:12,again:5},
+  obby:{name:'Obby Tower',pad:null,desc:'Climb the moving platforms to the top of the tower! Fall and you restart at your last glowing checkpoint.',reward:15,again:5},
 };
 
 function padAt(x,z,g,b,id){
@@ -728,9 +733,10 @@ function padAt(x,z,g,b,id){
 function buildArcade(ax,az,g){
   clearAbove(ax-8,az-4,ax+8,az+4,g);
   floorPad(ax-8,az-4,ax+8,az+4,g,B.path);
-  padAt(ax-5,az,g,B.padB,'hop');
-  padAt(ax,az,g,B.padR,'berry');
-  padAt(ax+5,az,g,B.padY,'firefly');
+  padAt(ax-6,az,g,B.padB,'hop');
+  padAt(ax-2,az,g,B.padR,'berry');
+  padAt(ax+2,az,g,B.padY,'firefly');
+  padAt(ax+6,az,g,B.tele,'obby');
   lamp(ax-8,az-4,g);lamp(ax+8,az-4,g);lamp(ax-8,az+4,g);lamp(ax+8,az+4,g);
   ARCADE.x=ax;ARCADE.z=az;ARCADE.g=g;
 }
@@ -876,7 +882,7 @@ function buildTowns(){
   lamp(BAY.x+2,BAY.z+16,BAY.h);
 }
 
-function genWorld(){genTerrain();genDecor();buildCity();buildCourse();buildGarden();buildMaker();buildTowns();pruneTrees();}
+function genWorld(){genTerrain();genDecor();buildCity();buildCourse();buildGarden();buildMaker();buildTowns();buildObby();pruneTrees();MINI.obby.start=[OBBY.x+0.5,OBBY.g+0.2,OBBY.z+0.5];}
 
 /* ---- NPCs of Hoptopia ---- */
 const NPC_DEFS=[
@@ -1012,7 +1018,7 @@ const palTex=gl.createTexture();
 (function(){
   const c=document.createElement('canvas');c.width=c.height=256;
   const g2=c.getContext('2d');
-  for(let t=1;t<=44;t++){
+  for(let t=1;t<=46;t++){
     const tx=(t&15)*16,ty=(t>>4)*16;
     const d=ac.getImageData(tx,ty,16,16);
     let r=0,gg=0,b=0,n=0;
@@ -1028,7 +1034,7 @@ const palTex=gl.createTexture();
   }
   /* gentle top-light band per tile, only over opaque pixels */
   g2.globalCompositeOperation='source-atop';
-  for(let t=1;t<=44;t++){
+  for(let t=1;t<=46;t++){
     const tx=(t&15)*16,ty=(t>>4)*16;
     g2.fillStyle='rgba(255,255,255,0.07)';g2.fillRect(tx,ty,16,5);
     g2.fillStyle='rgba(0,20,40,0.07)';g2.fillRect(tx,ty+11,16,5);
@@ -1627,6 +1633,8 @@ function moveEntity(e,dt){
       else if(e.y<sg){e.y=sg;if(e.vy<0)e.vy=0;e.onGround=true;}
     }
   }
+  moverCarry(e);
+  gadgetCheck(e);
   /* wedged inside something solid (old bug / stale save): pop free */
   if(e===P){
     if(boxSolid(e,e.x,e.y,e.z)){
@@ -2270,6 +2278,7 @@ function updateHUD(){
   let txt='';
   if(mini){
     if(mini.id==='hop')txt='Lily Hop! Reach the flag — '+mini.t.toFixed(0)+'s';
+    else if(mini.id==='obby')txt='Obby Tower! Climb to the top — '+mini.t.toFixed(0)+'s';
     else if(mini.id==='berry')txt='Berries '+mini.count+'/'+MINI.berry.goal+' — '+Math.max(0,Math.ceil(mini.tLeft))+'s left!';
     else if(mini.id==='firefly')txt='Fireflies '+mini.count+'/'+MINI.firefly.goal+' — '+Math.max(0,Math.ceil(mini.tLeft))+'s';
     else if(mini.id==='plot')txt='YOUR game! Coins '+mini.count+'/'+mini.total+' — reach the flag!';
@@ -2312,7 +2321,7 @@ let mini=null,padCool=0;
 function checkPads(dt){
   padCool-=dt;
   if(mini||modalOpen||dialog.npc||padCool>0)return;
-  for(const id of ['hop','berry','firefly']){
+  for(const id of ['hop','berry','firefly','obby']){
     const p=MINI[id].pad;
     if(Math.abs(P.y-p[1])<1.3&&Math.hypot(P.x-p[0],P.z-p[2])<1.6){padCool=2;confirmMini(id);return;}
   }
@@ -2339,6 +2348,7 @@ function startMini(id){
     for(const b of GARD.bushes)if(gb(b[0],b[1],b[2])!==B.berry)edit(b[0],b[1],b[2],B.berry);
     teleport(g.start);}
   if(id==='firefly')spawnFlies();
+  if(id==='obby'){teleport(g.start);mini.cp=OBBY.cps[0];}
   sHop();updateHUD();
 }
 function updateMini(dt){
@@ -2368,6 +2378,11 @@ function updateMini(dt){
         if(mini.count>=MINI.firefly.goal){endMini(true);return;}}
     }
     if(mini.tLeft<=0)endMini(false);
+  }else if(mini.id==='obby'){
+    for(const cp of OBBY.cps)
+      if(Math.hypot(P.x-cp[0],P.z-cp[2])<1.9&&Math.abs(P.y-cp[1])<1.6)mini.cp=cp;
+    if(P.y<mini.cp[1]-7){teleport(mini.cp);toast('Whoops! Back to the checkpoint');sBad();}
+    if(Math.hypot(P.x-OBBY.flag[0],P.z-OBBY.flag[2])<2.1&&Math.abs(P.y-OBBY.flag[1])<2.6)endMini(true);
   }else if(mini.id==='plot'){
     for(const c of COINSE){
       if(c.got)continue;
@@ -2408,6 +2423,10 @@ const MODELS=[
   {id:'start',name:'Start Pad',cost:0,tile:T.padB},
   {id:'coin',name:'Coin',cost:0,tile:T.coin},
   {id:'flagM',name:'Goal Flag',cost:0,tile:T.flag},
+  {id:'bounce',name:'Bouncy Shroom',cost:0,tile:T.bounce},
+  {id:'tele',name:'Teleporter',cost:0,tile:T.tele},
+  {id:'moverH',name:'Slide Platform',cost:0,mover:true},
+  {id:'moverV',name:'Lift Platform',cost:0,mover:true},
   {id:'shroomH',name:'Shroom Hut',cost:0,tile:T.capR},
   {id:'hut',name:'Hut',cost:0,tile:T.plank},
   {id:'tower',name:'Lily Tower',cost:0,tile:T.roofP},
@@ -2419,6 +2438,8 @@ const PLOTGAME={start:null,flag:null};
 let makerOn=false,makerSel=null;
 const MICONS={};
 function modelIcon(md){
+  if(md.id==='moverH')return '<svg viewBox="0 0 24 24" width="34" height="34"><rect x="5" y="10" width="14" height="5" rx="2" fill="#8a52e6"/><path d="M2 7l3 3-3 3M22 7l-3 3 3 3" stroke="#5e2aa0" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  if(md.id==='moverV')return '<svg viewBox="0 0 24 24" width="34" height="34"><rect x="5" y="10" width="14" height="5" rx="2" fill="#43cea2"/><path d="M9 4l3-3 3 3M9 20l3 3 3-3" stroke="#1e8a68" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   if(md.id==='erase')return '<svg viewBox="0 0 24 24" width="34" height="34"><path d="M5 5l14 14M19 5L5 19" stroke="#e04a3a" stroke-width="3.4" stroke-linecap="round" fill="none"/></svg>';
   if(md.id==='undo')return '<svg viewBox="0 0 24 24" width="34" height="34"><path d="M4 10h11a5 5 0 1 1 0 10h-4" stroke="#1f8fd0" stroke-width="2.8" fill="none" stroke-linecap="round"/><path d="M8 6l-4 4 4 4" stroke="#1f8fd0" stroke-width="2.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   if(!MICONS[md.id])MICONS[md.id]=tileIcon(md.tile);
@@ -2441,6 +2462,9 @@ function doStamp(id,x,z){
     case 'start':for(let dx=-1;dx<=1;dx++)for(let dz=-1;dz<=1;dz++)sb(x+dx,g-1,z+dz,B.padB);break;
     case 'coin':break;
     case 'flagM':sb(x,g,z,B.flag);break;
+    case 'bounce':sb(x,g,z,B.bounce);break;
+    case 'tele':sb(x,g-1,z,B.tele);break;
+    case 'moverH':case 'moverV':break; /* entity-only, synced from placements */
     case 'shroomH':shroomHouse(x,z,g,B.capR);break;
     case 'hut':hut(x,z,g,B.plank,B.roofP);break;
     case 'tower':tower(x,z,g);break;
@@ -2449,10 +2473,19 @@ function doStamp(id,x,z){
 }
 function syncPlotEnts(){
   COINSE.length=0;PLOTGAME.start=null;PLOTGAME.flag=null;
+  for(let i=MOVERS.length-1;i>=0;i--)if(MOVERS[i].plot)MOVERS.splice(i,1);
+  TELE_PAIRS=TELE_PAIRS.filter(pr=>!pr.plot);
+  let pendingTele=null;
   for(const p of PLACED){
     if(p.m==='coin')COINSE.push({x:p.x+0.5,y:PLOT.g+0.9,z:p.z+0.5,got:false});
     else if(p.m==='start')PLOTGAME.start=[p.x+0.5,PLOT.g+0.3,p.z+0.5];
     else if(p.m==='flagM')PLOTGAME.flag=[p.x+0.5,PLOT.g+1,p.z+0.5];
+    else if(p.m==='moverH')MOVERS.push({x:p.x+0.5,y:PLOT.g+0.9,z:p.z+0.5,ax:3,ay:0,az:0,per:4,ph:(p.x%7)/7,sx:2,sz:2,col:'#8a52e6',plot:true});
+    else if(p.m==='moverV')MOVERS.push({x:p.x+0.5,y:PLOT.g+1.6,z:p.z+0.5,ax:0,ay:1.9,az:0,per:4.5,ph:(p.z%7)/7,sx:2,sz:2,col:'#43cea2',plot:true});
+    else if(p.m==='tele'){
+      if(pendingTele){TELE_PAIRS.push({a:pendingTele,b:[p.x,p.z],plot:true});pendingTele=null;}
+      else pendingTele=[p.x,p.z];
+    }
   }
 }
 /* stamp + bookkeeping shared by solo play, hosting, and visiting */
@@ -2509,7 +2542,7 @@ function eraseAt(hit){
       hostErase(i);return;}
   }
   for(let i=PLACED.length-1;i>=0;i--){
-    if(PLACED[i].m==='coin'&&Math.abs(hit.x-PLACED[i].x)<=2&&Math.abs(hit.z-PLACED[i].z)<=2){
+    if(['coin','moverH','moverV'].indexOf(PLACED[i].m)>=0&&Math.abs(hit.x-PLACED[i].x)<=2&&Math.abs(hit.z-PLACED[i].z)<=2){
       if(MP&&MP.role==='guest'){
         if(!MP.allowBuild){toast('Ask the host to turn on "Friends can build"!');return;}
         mpSend(['plotErase',i]);return;
@@ -2629,6 +2662,14 @@ function gameTap(sx,sy){
       else placeModel(makerSel,hit.x,hit.z);
       return;}
     if(hit){toast('Build on YOUR plot — inside the path ring on Maker Isle!');return;}
+  }
+  if(PET&&SV.pet){
+    const pd=[PET.x-CAMEYE[0],PET.y+0.4-CAMEYE[1],PET.z-CAMEYE[2]];
+    const tproj=pd[0]*dir[0]+pd[1]*dir[1]+pd[2]*dir[2];
+    if(tproj>0.5&&tproj<10){
+      const cx2=CAMEYE[0]+dir[0]*tproj,cy2=CAMEYE[1]+dir[1]*tproj,cz2=CAMEYE[2]+dir[2]*tproj;
+      if(Math.hypot(PET.x-cx2,PET.y+0.4-cy2,PET.z-cz2)<0.8){openPetCard();return;}
+    }
   }
   const n=npcAlongRay(dir,10);
   if(n){talkTo(n);return;}
@@ -2786,6 +2827,7 @@ function boot(){
   else P.y=groundY(P.x,P.z)+0.1;
   WORLD_READY=true;
   if(SV.q2&&SV.q2.s1===1){SV.q2.s1=0;save();}
+  initPet();
   updateHUD();
   $('#loading').style.display='none';
   showTitle();
@@ -2799,6 +2841,7 @@ const abtnsEl=$('#abtns');
 function frame(now){
   const dt=Math.min(0.05,(now-lastT)/1000);lastT=now;
   const t=now/1000;
+  RENDT=t;RENDDT=dt;
   pollGamepad(dt);keyCam(dt);
   const wasWater=P.inWater,wasGround=P.onGround,fallVy=P.vy;
   if(SHOP.active){
@@ -2838,6 +2881,7 @@ function frame(now){
   questTick(dt);
   fishTick();
   bugTick(dt);
+  petTick(dt,t);
   abtnsEl.classList.toggle('dim',P.moving&&!modalOpen&&!dialog.npc);
   for(const n of NPCS)if(Math.hypot(n.x-P.x,n.z-P.z)<48)updateNPC(n,dt);
   updateBangs();
@@ -2871,6 +2915,16 @@ function frame(now){
       drawBox(mMul(mT(FISHING.x,FISHING.y+dip+0.1,FISHING.z),mS(0.17,0.08,0.17)),'#e04848');
     }
     for(const b of BUGS)drawBug(b,t);
+    for(const m of MOVERS){
+      const p=moverPos(m,t);
+      drawBox(mMul(mT(p[0],p[1],p[2]),mS(m.sx,0.5,m.sz)),m.col);
+    }
+    drawPet(t);
+    if(EGG){
+      const bob=Math.sin(t*3)*0.05;
+      drawBox(mMul(mT(EGG.x,EGG.y+0.25+bob,EGG.z),mS(0.3,0.36,0.3)),'#f2efe4');
+      drawBox(mMul(mT(EGG.x+0.06,EGG.y+0.3+bob,EGG.z+0.08),mS(0.09,0.09,0.05)),'#9fc7d8');
+    }
     /* particles + lantern glow + blob shadows (soft, blended) */
     gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
     gl.depthMask(false);
@@ -3529,6 +3583,163 @@ function mpTick(dt,t,pv){
 bindBtn($('#btnSay'),mpEmoteBar);
 bindBtn($('#chipMP'),()=>mpPanel());
 
+/* ========== 14. Phase 3: moving platforms, Obby Tower, pet, maker gadgets ========== */
+const MOVERS=[]; /* {x,y,z,ax,ay,az,per,ph,sx,sz,col,plot} */
+let RENDT=0,RENDDT=0.016;
+function moverPos(m,tN){const w=Math.sin((tN/m.per+m.ph)*6.2832);
+  return[m.x+m.ax*w,m.y+m.ay*w,m.z+m.az*w];}
+function moverCarry(e){
+  for(const m of MOVERS){
+    const p=moverPos(m,RENDT);
+    if(Math.abs(e.x-p[0])<=m.sx/2+e.hw&&Math.abs(e.z-p[2])<=m.sz/2+e.hw){
+      const top=p[1]+0.25;
+      if(e.vy<=0&&e.y>=top-0.6&&e.y<=top+0.4){
+        const q=moverPos(m,RENDT-RENDDT);
+        e.x+=p[0]-q[0];e.z+=p[2]-q[2];
+        e.y=top;e.vy=0;e.onGround=true;
+      }
+    }
+  }
+}
+/* bouncy shrooms + teleporter pads (checked when landing/standing) */
+let TELE_PAIRS=[],TELE_CD=0;
+function gadgetCheck(e){
+  if(e!==P)return;
+  const bx=Math.floor(e.x),bz=Math.floor(e.z),by=Math.floor(e.y-0.4);
+  const b=gb(bx,by,bz);
+  if(e.onGround&&b===B.bounce){
+    e.vy=13.5;e.onGround=false;
+    blip(300,.08,'square',.2);setTimeout(()=>blip(620,.12,'square',.18),60);
+    burst(e.x,e.y+0.2,e.z,8,'#ff9cbd',1.8,1.5,4,0.09);
+  }
+  if(e.onGround&&b===B.tele&&performance.now()>TELE_CD){
+    for(const pr of TELE_PAIRS){
+      let dest=null;
+      if(Math.abs(pr.a[0]-bx)<1&&Math.abs(pr.a[1]-bz)<1)dest=pr.b;
+      else if(Math.abs(pr.b[0]-bx)<1&&Math.abs(pr.b[1]-bz)<1)dest=pr.a;
+      if(dest){
+        TELE_CD=performance.now()+1600;
+        burst(e.x,e.y+0.8,e.z,12,'#c9a8ff',2,2,5,0.1);
+        teleport([dest[0]+0.5,walkGroundY(dest[0]+0.5,dest[1]+0.5)+0.2,dest[1]+0.5]);
+        burst(P.x,P.y+0.8,P.z,12,'#c9a8ff',2,2,5,0.1);
+        blip(500,.06,'sine',.18);blip(900,.09,'sine',.16);
+        break;
+      }
+    }
+  }
+}
+
+/* ---- Obby Tower (4th arcade game) ---- */
+const OBBY={x:84,z:68,g:0,cps:[],flag:null}; /* clear meadow between city and Maker Isle */
+const OBBY_PLATS=[
+ [0,0,0,3],[4,0,2,1],[7,3,4,1],[7,7,6,1],[4,9,8,1],
+ [0,7,10,1,'cp'],[-4,9,12,1],[-7,6,14,1],[-7,2,16,1],
+ [-4,-1,18,1,'cp'],[0,-4,20,1],[4,-4,22,1],[7,-1,24,2]];
+function buildObby(){
+  const g=Math.max(walkGroundY(OBBY.x,OBBY.z),WL+2);
+  OBBY.g=g;
+  clearAbove(OBBY.x-12,OBBY.z-10,OBBY.x+12,OBBY.z+15,g);
+  floorPad(OBBY.x-4,OBBY.z-4,OBBY.x+4,OBBY.z+4,g,B.path);
+  for(let y=g;y<g+24;y++)sb(OBBY.x,y,OBBY.z,B.wood); /* center mast */
+  OBBY.cps=[[OBBY.x+0.5,g,OBBY.z+0.5]];
+  for(const p of OBBY_PLATS){
+    const px2=OBBY.x+p[0],pz=OBBY.z+p[1],py=g+p[2],r=p[3];
+    if(p[2]>0)fillB(px2-r,py,pz-r,px2+r,py,pz+r,B.plank);
+    if(p[4]==='cp'){
+      sb(px2,py+1,pz,B.lantern);
+      OBBY.cps.push([px2+0.5,py+1,pz+0.5]);
+    }
+  }
+  const top=OBBY_PLATS[OBBY_PLATS.length-1];
+  OBBY.flag=[OBBY.x+top[0]+0.5,g+top[2]+1,OBBY.z+top[1]+0.5];
+  sb(OBBY.x+top[0],g+top[2]+1,OBBY.z+top[1],B.flag);
+  sb(OBBY.x+top[0]+1,g+top[2]+1,OBBY.z+top[1]+1,B.lantern);
+  /* moving platforms bridge the tricky gaps */
+  MOVERS.push(
+    {x:OBBY.x+2,y:g+1.2,z:OBBY.z+0.5,ax:2.2,ay:0,az:0,per:3.6,ph:0,sx:2,sz:2,col:'#8a52e6'},
+    {x:OBBY.x+5.5,y:g+5,z:OBBY.z+5,ax:0,ay:0,az:2.2,per:4.2,ph:0.3,sx:2,sz:2,col:'#43cea2'},
+    {x:OBBY.x-2,y:g+11,z:OBBY.z+8,ax:2.4,ay:0,az:0,per:4,ph:0.6,sx:2,sz:2,col:'#8a52e6'},
+    {x:OBBY.x-5.5,y:g+15,z:OBBY.z+0,ax:0,ay:0,az:2.4,per:4.4,ph:0.1,sx:2,sz:2,col:'#43cea2'},
+    {x:OBBY.x-2,y:g+19,z:OBBY.z-2.5,ax:0,ay:1.6,az:0,per:3.4,ph:0.5,sx:2,sz:2,col:'#ffb02e'},
+    {x:OBBY.x+2,y:g+21,z:OBBY.z-4,ax:2,ay:0,az:0,per:3.8,ph:0.8,sx:2,sz:2,col:'#8a52e6'});
+}
+
+/* ---- pet ---- */
+let PET=null,EGG=null;
+const PET_NAMES=['Dot','Bubbles','Jelly','Pip','Squirm','Momo'];
+function initPet(){
+  if(SV.pet&&SV.pet.stage>=1)
+    PET={x:P.x-1,y:P.y,z:P.z-1,yaw:0,ph:Math.random()*7};
+}
+function bugBagTotal(){let n=0;for(const k in SV.bugBag)n+=SV.bugBag[k];return n;}
+function petTick(dt,t){
+  if(!PET||!SV.pet)return;
+  const fx=-Math.sin(P.yaw),fz=-Math.cos(P.yaw);
+  const tx=P.x-fx*1.5+fz*0.5,tz=P.z-fz*1.5-fx*0.5;
+  const d=Math.hypot(tx-PET.x,tz-PET.z);
+  if(d>18){PET.x=tx;PET.z=tz;}
+  else if(d>0.4){
+    const k=Math.min(1,(SV.pet.stage>=2?4.5:3.2)*dt/Math.max(d,0.001)*d);
+    PET.x=lerp(PET.x,tx,Math.min(1,3.4*dt));
+    PET.z=lerp(PET.z,tz,Math.min(1,3.4*dt));
+    PET.yaw=Math.atan2(P.x-PET.x,P.z-PET.z);
+  }
+  const gy=walkGroundY(PET.x,PET.z);
+  PET.y=lerp(PET.y||gy,gy+(SV.pet.stage>=2?0:0.12),Math.min(1,8*dt));
+}
+function drawPet(t){
+  if(!PET||!SV.pet)return;
+  const b=mMul(mT(PET.x,PET.y,PET.z),mRY(PET.yaw));
+  const part=(tm,sx,sy,sz,col)=>drawBox(mMul(b,mMul(tm,mS(sx,sy,sz))),col);
+  const wig=Math.sin(t*8+PET.ph)*0.35;
+  if(SV.pet.stage===1){
+    part(mT(0,0.22,0),0.3,0.24,0.3,'#5a7a34');
+    part(mMul(mT(Math.sin(wig)*0.14,0.2,-0.28),mRY(wig)),0.1,0.14,0.26,'#4a6a2a');
+    part(mT(0.07,0.32,0.12),0.06,0.06,0.02,'#16242e');
+    part(mT(-0.07,0.32,0.12),0.06,0.06,0.02,'#16242e');
+  }else{
+    const hop=Math.abs(Math.sin(t*6+PET.ph))*0.1;
+    part(mT(0,0.24+hop,0),0.34,0.26,0.3,'#74cb43');
+    part(mT(0,0.46+hop,0.02),0.3,0.22,0.26,'#74cb43');
+    part(mT(0.08,0.52+hop,0.14),0.08,0.08,0.03,'#fff');
+    part(mT(-0.08,0.52+hop,0.14),0.08,0.08,0.03,'#fff');
+    part(mT(0.08,0.52+hop,0.16),0.04,0.04,0.02,'#16242e');
+    part(mT(-0.08,0.52+hop,0.16),0.04,0.04,0.02,'#16242e');
+    part(mT(0.12,0.08+hop,0),0.1,0.16,0.12,'#4f9e23');
+    part(mT(-0.12,0.08+hop,0),0.1,0.16,0.12,'#4f9e23');
+  }
+}
+function openPetCard(){
+  const p=SV.pet;
+  const bugs=bugBagTotal();
+  openModal('<h2>'+p.name+'</h2>'
+    +'<p>'+(p.stage===1?'A very wiggly tadpole!':'A proud little froglet!')+'</p>'
+    +(p.stage===1?'<p>Feed bugs to help '+p.name+' grow: <b>'+p.fed+'/5</b></p>':'<p>Fully grown and full of hops!</p>')
+    +'<p class="dim">Bugs in your pocket: '+bugs+'</p>',
+    [...(p.stage===1&&bugs>0?[['Feed a bug!','',()=>{
+      for(const k in SV.bugBag){if(SV.bugBag[k]>0){SV.bugBag[k]--;break;}}
+      p.fed++;sPick();
+      burst(PET.x,PET.y+0.5,PET.z,8,'#ff9cbd',1.4,1.6,4,0.08);
+      if(p.fed>=5){p.stage=2;save();sWin();
+        openModal('<h2>✨ '+p.name+' grew up! ✨</h2><p>Your tadpole is now a froglet — look at those little legs!</p>',
+          [['Hooray!','',closeModal]]);return;}
+      save();openPetCard();
+    }]]:[]),
+    ['Close','gray',closeModal]]);
+}
+function namePetModal(){
+  let chips='';
+  for(const n of PET_NAMES)chips+='<button class="dbtn" data-pn="'+n+'" style="margin:4px">'+n+'</button>';
+  openModal('<h2>It hatched!</h2><p>A wiggly little tadpole looks up at you. What’s its name?</p>'
+    +'<div style="display:flex;flex-wrap:wrap;justify-content:center">'+chips+'</div>',[]);
+  document.querySelectorAll('[data-pn]').forEach(b=>{
+    b.onclick=()=>{
+      SV.pet={stage:1,fed:0,name:b.dataset.pn};save();
+      initPet();closeModal();
+      toast(b.dataset.pn+' is following you now!');sWin();
+    };});
+}
+
 /* ========== 13. Phase 2: fishing, bug catching, Pond-o-dex ========== */
 const FISH_DEFS=[
  {id:'minnow',name:'Minnow',w:30,val:1,c1:'#9fc7d8',c2:'#7da8bc'},
@@ -3635,7 +3846,8 @@ function bugTick(dt){
     b.y=b.baseY+Math.sin(b.a*2.3)*0.5;
     if(b.t>b.life){BUGS.splice(i,1);continue;}
     if(Math.hypot(b.x-P.x,b.y-(P.y+1),b.z-P.z)<1.2){
-      SV.bugs[b.def.id]=(SV.bugs[b.def.id]||0)+1;save();
+      SV.bugs[b.def.id]=(SV.bugs[b.def.id]||0)+1;
+      SV.bugBag[b.def.id]=(SV.bugBag[b.def.id]||0)+1;save();
       sPick();popLabel('+1 '+b.def.name,BUGICON[b.def.id]);
       BUGS.splice(i,1);
     }
@@ -3749,6 +3961,10 @@ const QDEFS=[
   ask:'Morning dew makes the finest tea. Pick 4 flowers at sunrise, while the dew still sits on them.',
   hint:'Pick flowers between sunrise and mid-morning — the dew fades by then!',
   thanks:'Ahh, perfect dew. Come by for tea some hundred floods from now.'},
+ {id:'pet1',type:'egg',giver:'marina',coins:0,name:'The Wiggly Egg',
+  ask:'Something washed into the cove shallows — a little egg! It needs a kind keeper. Will you find it?',
+  hint:'The egg is in the cove shallows — follow the compass ring!',
+  thanks:'Look after the little one, dear!'},
  {id:'h1',type:'hunt',giver:'puddles',coins:25,name:'Buried Treasure',
   ask:'Me grandfrog’s treasure map! First clue: “Where the water dances and the towers watch.” Arr-ribbit!',
   hint:'Follow the clues! The compass shows the search area.',
@@ -3895,6 +4111,14 @@ function questTick(dt){
       updateHUD();
     }
   }
+  /* the wiggly egg */
+  if(q2get('pet1')===1){
+    if(!EGG){const ex=COVE.x-5.5,ez=COVE.z-7.5;EGG={x:ex,y:walkGroundY(ex,ez),z:ez};}
+    if(Math.hypot(EGG.x-P.x,EGG.z-P.z)<2.2){
+      SV.q2.pet1=2;save();EGG=null;
+      namePetModal();
+    }
+  }else if(EGG)EGG=null;
   /* SNAP + FISH button visibility */
   const ws=$('#wrapSnap');
   if(ws)ws.style.display=anyPhotoActive()&&!SHOP.active?'flex':'none';
@@ -3913,6 +4137,7 @@ function q2status(q){
   if(q.type==='fireflies')return (SV.q2p.t1||0)+'/5 after dark';
   if(q.type==='dew')return (SV.q2p.t2||0)+'/4 at sunrise';
   if(q.type==='hunt')return 'Clue '+((SV.q2p.h1||0)+1)+' of 3';
+  if(q.type==='egg')return 'Find the egg in the cove!';
   return 'In progress';
 }
 function openQuestBoard(){
@@ -3964,6 +4189,7 @@ MAP_COLS[B.mud]='#6b4a2a';MAP_COLS[B.plank]='#caa05e';MAP_COLS[B.roofP]='#f2699c
 MAP_COLS[B.roofB]='#4dc2e8';MAP_COLS[B.path]='#d9c99e';MAP_COLS[B.lantern]='#ffd23e';
 MAP_COLS[B.fence]='#a8743a';MAP_COLS[B.padB]='#4dc2e8';MAP_COLS[B.padR]='#f2699c';
 MAP_COLS[B.padY]='#ffd23e';MAP_COLS[B.flowP]='#f25c97';MAP_COLS[B.flowY]='#ffd23e';
+MAP_COLS[B.bounce]='#ff6f9c';MAP_COLS[B.tele]='#8a52e6';
 MAP_COLS[B.berry]='#4aa832';MAP_COLS[B.shroom]='#e04848';
 function buildMiniBase(){
   const cv=document.createElement('canvas');cv.width=W;cv.height=D;
@@ -4018,6 +4244,7 @@ function questTargets(){
     else if(q.id==='p3'){t.push({x:BAY.x,z:BAY.z+6,k:'area'});}
     else if(q.type==='seek'){t.push({x:CITY.x,z:CITY.z,k:'area'});}
     else if(q.type==='dew'){t.push({x:GARDEN.x,z:GARDEN.z,k:'area',icon:'flower'});}
+    else if(q.type==='egg'){t.push({x:COVE.x-5,z:COVE.z-7,k:'area'});}
     else if(q.type==='hunt'){
       const st=SV.q2p.h1||0;
       const w=HUNT_STEPS[Math.min(st,HUNT_STEPS.length-1)];
