@@ -285,7 +285,7 @@ COLLECT[B.flowP]='flower';COLLECT[B.flowY]='flower';COLLECT[B.berry]='berry';COL
 COLLECT[B.pebble]='pebble';COLLECT[B.shell]='shell';COLLECT[B.reed]='reed';COLLECT[B.shroom]='mushroom';
 const T={grassTop:1,grassSide:2,dirt:3,sand:4,stone:5,water:6,lilyTop:7,lilySide:8,reed:9,woodSide:10,
   woodTop:11,leaf:12,stem:13,capR:14,capP:15,flowP:16,flowY:17,berry:18,stick:19,pebble:20,shell:21,
-  mud:22,plank:23,roofP:24,roofB:25,path:26,lantern:27,fence:28,flag:29,shroom:30,coin:31,padB:32,padR:33,padY:34};
+  mud:22,plank:23,roofP:24,roofB:25,path:26,lantern:27,fence:28,flag:29,shroom:30,coin:31,padB:32,padR:33,padY:34,foam:35};
 const ITEMS={flower:{name:'Flowers',tile:T.flowP},berry:{name:'Berries',tile:T.berry},
   stick:{name:'Sticks',tile:T.stick},pebble:{name:'Pebbles',tile:T.pebble},shell:{name:'Shells',tile:T.shell},
   reed:{name:'Reeds',tile:T.reed},mushroom:{name:'Mushrooms',tile:T.shroom}};
@@ -353,6 +353,11 @@ tdraw(T.coin,()=>{px(4,2,8,12,'#f0b429');px(3,4,10,8,'#f0b429');px(5,3,6,10,'#ff
 tdraw(T.padB,()=>{speck('#4dc2e8',.06);px(0,0,16,1,'#eafcff');px(0,15,16,1,'#1a6f96');px(0,0,1,16,'#eafcff');px(15,0,1,16,'#1a6f96');px(6,6,4,4,'#eafcff');});
 tdraw(T.padR,()=>{speck('#f2699c',.06);px(0,0,16,1,'#ffe0ec');px(0,15,16,1,'#a83a60');px(0,0,1,16,'#ffe0ec');px(15,0,1,16,'#a83a60');px(6,6,4,4,'#ffe0ec');});
 tdraw(T.padY,()=>{speck('#ffd23e',.06);px(0,0,16,1,'#fff6d8');px(0,15,16,1,'#b8860a');px(0,0,1,16,'#fff6d8');px(15,0,1,16,'#b8860a');px(6,6,4,4,'#fff6d8');});
+tdraw(T.foam,()=>{ /* shoreline foam: broken white dashes on transparent */
+  px(0,6,4,3,'rgba(255,255,255,.85)');px(6,5,3,3,'rgba(255,255,255,.75)');
+  px(11,7,4,2,'rgba(255,255,255,.85)');px(3,10,3,2,'rgba(255,255,255,.6)');
+  px(9,11,4,2,'rgba(255,255,255,.7)');px(13,3,2,2,'rgba(255,255,255,.6)');
+  px(1,2,2,2,'rgba(255,255,255,.55)');});
 
 function tileIcon(t){const c=document.createElement('canvas');c.width=c.height=32;
   const g=c.getContext('2d');g.imageSmoothingEnabled=false;
@@ -692,16 +697,27 @@ function mkProg(vs,fs){const p=gl.createProgram();
   gl.attachShader(p,mkShader(gl.VERTEX_SHADER,vs));gl.attachShader(p,mkShader(gl.FRAGMENT_SHADER,fs));
   gl.linkProgram(p);if(!gl.getProgramParameter(p,gl.LINK_STATUS))console.error('link',gl.getProgramInfoLog(p));return p;}
 
-const TERR_VS=`attribute vec3 aP;attribute vec2 aT;attribute float aL;
-uniform mat4 uMVP;uniform vec3 uCam;
-varying vec2 vT;varying float vL;varying float vD;
-void main(){gl_Position=uMVP*vec4(aP,1.0);vT=aT;vL=aL;vD=distance(aP,uCam);}`;
+const TERR_VS=`attribute vec3 aP;attribute vec2 aT;attribute float aL;attribute float aS;
+uniform mat4 uMVP;uniform vec3 uCam;uniform float uTime;
+varying vec2 vT;varying float vL;varying float vD;varying vec3 vWP;
+void main(){
+  vec3 p=aP;
+  float ph=uTime*2.0+aP.x*1.4+aP.z*1.8;
+  if(aS>1.5){p.y+=sin(ph)*0.045;}                 /* water bob */
+  else if(aS>0.5){p.x+=sin(ph)*0.08;p.z+=cos(ph*0.9)*0.05;} /* plant sway */
+  gl_Position=uMVP*vec4(p,1.0);
+  vT=aT;vL=aL;vD=distance(p,uCam);vWP=p;}`;
 const TERR_FS=`precision mediump float;
-varying vec2 vT;varying float vL;varying float vD;
+varying vec2 vT;varying float vL;varying float vD;varying vec3 vWP;
 uniform sampler2D uTex;uniform float uAlpha;uniform vec3 uFog;uniform vec2 uFogD;
+uniform highp float uTime;uniform float uWave;
 void main(){vec4 c=texture2D(uTex,vT);if(c.a<0.4)discard;
+vec3 col=c.rgb*vL;
+if(uWave>0.5){
+  float s=sin(uTime*2.6+vWP.x*1.9+vWP.z*2.4)+sin(uTime*1.7+vWP.x*3.1-vWP.z*1.3);
+  col*=1.0+0.05*s;}
 float f=clamp((vD-uFogD.x)/(uFogD.y-uFogD.x),0.0,1.0);
-gl_FragColor=vec4(mix(c.rgb*vL,uFog,f),uAlpha);}`;
+gl_FragColor=vec4(mix(col,uFog,f),uAlpha);}`;
 const ENT_VS=`attribute vec3 aP;attribute float aL;
 uniform mat4 uPV;uniform mat4 uM;uniform vec3 uCam;
 varying float vL;varying float vD;
@@ -714,9 +730,11 @@ gl_FragColor=vec4(mix(uCol*vL,uFog,f),uEAlpha);}`;
 
 const PT={p:mkProg(TERR_VS,TERR_FS)},PE={p:mkProg(ENT_VS,ENT_FS)};
 PT.aP=gl.getAttribLocation(PT.p,'aP');PT.aT=gl.getAttribLocation(PT.p,'aT');PT.aL=gl.getAttribLocation(PT.p,'aL');
+PT.aS=gl.getAttribLocation(PT.p,'aS');
 PT.uMVP=gl.getUniformLocation(PT.p,'uMVP');PT.uCam=gl.getUniformLocation(PT.p,'uCam');
 PT.uTex=gl.getUniformLocation(PT.p,'uTex');PT.uAlpha=gl.getUniformLocation(PT.p,'uAlpha');
 PT.uFog=gl.getUniformLocation(PT.p,'uFog');PT.uFogD=gl.getUniformLocation(PT.p,'uFogD');
+PT.uTime=gl.getUniformLocation(PT.p,'uTime');PT.uWave=gl.getUniformLocation(PT.p,'uWave');
 PE.aP=gl.getAttribLocation(PE.p,'aP');PE.aL=gl.getAttribLocation(PE.p,'aL');
 PE.uPV=gl.getUniformLocation(PE.p,'uPV');PE.uM=gl.getUniformLocation(PE.p,'uM');PE.uCam=gl.getUniformLocation(PE.p,'uCam');
 PE.uCol=gl.getUniformLocation(PE.p,'uCol');PE.uFog=gl.getUniformLocation(PE.p,'uFog');PE.uFogD=gl.getUniformLocation(PE.p,'uFogD');
@@ -772,15 +790,19 @@ const FACES=[
 function quadUV(t){const p=1/512;
   const u0=(t&15)/16+p,v0=(t>>4)/16+p,u1=(t&15)/16+1/16-p,v1=(t>>4)/16+1/16-p;
   return [u0,v0,u1,v1];}
-function pushQuad(arr,c,t,ls){const uv=quadUV(t);
+/* vertex sway channel: 0 rigid, 1 plant top (sways), 2 water surface (bobs) */
+const SWAY=new Set([B.reed,B.flowP,B.flowY,B.berry,B.shroom,B.flag]);
+const NO_SW=[0,0,0,0];
+function pushQuad(arr,c,t,ls,sw){const uv=quadUV(t);sw=sw||NO_SW;
   const us=[[uv[0],uv[3]],[uv[2],uv[3]],[uv[2],uv[1]],[uv[0],uv[1]]];
   /* flip the quad diagonal toward the darker pair so AO shades smoothly */
   const ord=(ls[0]+ls[2]>=ls[1]+ls[3])?[0,1,2,0,2,3]:[1,2,3,1,3,0];
-  for(let k=0;k<6;k++){const i=ord[k];arr.push(c[i][0],c[i][1],c[i][2],us[i][0],us[i][1],ls[i]);}}
-function pushCross(arr,x,y,z,t){
+  for(let k=0;k<6;k++){const i=ord[k];arr.push(c[i][0],c[i][1],c[i][2],us[i][0],us[i][1],ls[i],sw[i]);}}
+function pushCross(arr,x,y,z,t,swaying){
   const ls=[0.95,0.95,0.95,0.95];
-  pushQuad(arr,[[x,y,z],[x+1,y,z+1],[x+1,y+1,z+1],[x,y+1,z]],t,ls);
-  pushQuad(arr,[[x+1,y,z],[x,y,z+1],[x,y+1,z+1],[x+1,y+1,z]],t,ls);}
+  const sw=swaying?[0,0,1,1]:NO_SW; /* only the tops wave */
+  pushQuad(arr,[[x,y,z],[x+1,y,z+1],[x+1,y+1,z+1],[x,y+1,z]],t,ls,sw);
+  pushQuad(arr,[[x+1,y,z],[x,y,z+1],[x,y+1,z+1],[x+1,y+1,z]],t,ls,sw);}
 /* baked ambient occlusion: darken face corners that touch neighboring blocks */
 const AO_TAB=[0.5,0.68,0.84,1.0];
 function aoFace(F,x,y,z){
@@ -807,15 +829,23 @@ function buildChunk(ci,cj){
     for(let y=0;y<H;y++){
       const b=world[base+y];if(b===0)continue;
       if(b===B.water){
-        if(gb(x,y+1,z)!==B.water)
-          pushQuad(war,[[x,y+0.88,z+1],[x+1,y+0.88,z+1],[x+1,y+0.88,z],[x,y+0.88,z]],T.water,[1,1,1,1]);
+        const W2=[2,2,2,2];
+        if(gb(x,y+1,z)!==B.water){
+          pushQuad(war,[[x,y+0.88,z+1],[x+1,y+0.88,z+1],[x+1,y+0.88,z],[x,y+0.88,z]],T.water,[1,1,1,1],W2);
+          /* shoreline foam strips where water touches land */
+          const yF=y+0.9,a=0.24,LF=[1,1,1,1];
+          if(SOLID.has(gb(x+1,y,z)))pushQuad(war,[[x+1-a,yF,z],[x+1,yF,z],[x+1,yF,z+1],[x+1-a,yF,z+1]],T.foam,LF,W2);
+          if(SOLID.has(gb(x-1,y,z)))pushQuad(war,[[x,yF,z],[x+a,yF,z],[x+a,yF,z+1],[x,yF,z+1]],T.foam,LF,W2);
+          if(SOLID.has(gb(x,y,z+1)))pushQuad(war,[[x,yF,z+1-a],[x+1,yF,z+1-a],[x+1,yF,z+1],[x,yF,z+1]],T.foam,LF,W2);
+          if(SOLID.has(gb(x,y,z-1)))pushQuad(war,[[x,yF,z],[x+1,yF,z],[x+1,yF,z+a],[x,yF,z+a]],T.foam,LF,W2);
+        }
         for(let fi=2;fi<6;fi++){const F=FACES[fi];
           if(gb(x+F.n[0],y,z+F.n[2])===B.air){
             const c=F.v.map(v=>[x+v[0],y+(v[1]?0.88:0),z+v[2]]);
-            pushQuad(war,c,T.water,[F.l,F.l,F.l,F.l]);}}
+            pushQuad(war,c,T.water,[F.l,F.l,F.l,F.l],F.v.map(v=>v[1]?2:0));}}
         continue;
       }
-      if(CROSS.has(b)){pushCross(arr,x,y,z,tileFor(b,1));continue;}
+      if(CROSS.has(b)){pushCross(arr,x,y,z,tileFor(b,1),SWAY.has(b));continue;}
       for(const F of FACES){
         const nb=gb(x+F.n[0],y+F.n[1],z+F.n[2]);
         if(SOLID.has(nb))continue;
@@ -826,7 +856,7 @@ function buildChunk(ci,cj){
   }
   const old=chunks[cj*CSX+ci];
   if(old){if(old.vb)gl.deleteBuffer(old.vb);if(old.wvb)gl.deleteBuffer(old.wvb);}
-  const ch={n:arr.length/6,wn:war.length/6,vb:null,wvb:null,
+  const ch={n:arr.length/7,wn:war.length/7,vb:null,wvb:null,
     cx:x0+8,cz:z0+8};
   if(ch.n){ch.vb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,ch.vb);
     gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(arr),gl.STATIC_DRAW);}
@@ -839,9 +869,10 @@ function remeshDirty(maxN){let n=0;
   for(const k of dirtySet){dirtySet.delete(k);buildChunk(k%CSX,(k/CSX)|0);if(++n>=maxN)break;}}
 
 function bindTerr(vb){gl.bindBuffer(gl.ARRAY_BUFFER,vb);
-  gl.enableVertexAttribArray(PT.aP);gl.vertexAttribPointer(PT.aP,3,gl.FLOAT,false,24,0);
-  gl.enableVertexAttribArray(PT.aT);gl.vertexAttribPointer(PT.aT,2,gl.FLOAT,false,24,12);
-  gl.enableVertexAttribArray(PT.aL);gl.vertexAttribPointer(PT.aL,1,gl.FLOAT,false,24,20);}
+  gl.enableVertexAttribArray(PT.aP);gl.vertexAttribPointer(PT.aP,3,gl.FLOAT,false,28,0);
+  gl.enableVertexAttribArray(PT.aT);gl.vertexAttribPointer(PT.aT,2,gl.FLOAT,false,28,12);
+  gl.enableVertexAttribArray(PT.aL);gl.vertexAttribPointer(PT.aL,1,gl.FLOAT,false,28,20);
+  gl.enableVertexAttribArray(PT.aS);gl.vertexAttribPointer(PT.aS,1,gl.FLOAT,false,28,24);}
 
 /* unit cube for entities (centered, 1x1x1) */
 const cubeVB=gl.createBuffer();
@@ -901,6 +932,28 @@ function drawSky(cam){
   gl.vertexAttribPointer(PE.aL,1,gl.FLOAT,false,16,12);
   gl.uniform2f(PE.uFogD,FOGD[0],FOGD[1]);
 }
+/* ---- particles: splashes, sparkles, dust, pollen ---- */
+const PARTS=[];
+function spawnPart(x,y,z,vx,vy,vz,life,col,s,grav){
+  if(PARTS.length>150)PARTS.shift();
+  PARTS.push({x,y,z,vx,vy,vz,t:0,life,col,s,grav:grav||0});}
+function burst(x,y,z,n,col,spd,up,grav,s){
+  for(let i=0;i<n;i++){
+    const a=Math.random()*Math.PI*2,r=(0.4+Math.random()*0.6)*spd;
+    spawnPart(x,y,z,Math.sin(a)*r,up*(0.6+Math.random()*0.8),Math.cos(a)*r,
+      0.5+Math.random()*0.5,col,(s||0.1)*(0.7+Math.random()*0.6),grav);}}
+function updateParts(dt){
+  for(let i=PARTS.length-1;i>=0;i--){
+    const p=PARTS[i];p.t+=dt;
+    if(p.t>=p.life){PARTS.splice(i,1);continue;}
+    p.vy-=p.grav*dt;
+    p.x+=p.vx*dt;p.y+=p.vy*dt;p.z+=p.vz*dt;}
+}
+function drawParts(){
+  for(const p of PARTS){
+    const a=1-p.t/p.life;
+    drawBoxA(mMul(mT(p.x,p.y,p.z),mS(p.s,p.s,p.s)),p.col,a*0.9);}
+}
 /* soft blob shadow that grounds critters */
 function drawShadow(e){
   const gy=groundY(e.x,e.z),h=e.y-gy;
@@ -920,6 +973,8 @@ function renderWorld(pv,cam,fwd,drawEnts){
   gl.uniform3f(PT.uFog,FOG[0],FOG[1],FOG[2]);
   gl.uniform2f(PT.uFogD,FOGD[0],FOGD[1]);
   gl.uniform1f(PT.uAlpha,1.0);
+  gl.uniform1f(PT.uTime,performance.now()/1000);
+  gl.uniform1f(PT.uWave,0);
   const vis=[];
   for(const ch of chunks){if(!ch)continue;
     const dx=ch.cx-cam[0],dz=ch.cz-cam[2];
@@ -934,7 +989,9 @@ function renderWorld(pv,cam,fwd,drawEnts){
   gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
   gl.depthMask(false);
   gl.uniform1f(PT.uAlpha,0.72);
+  gl.uniform1f(PT.uWave,1);
   for(const ch of vis){if(ch.wvb){bindTerr(ch.wvb);gl.drawArrays(gl.TRIANGLES,0,ch.wn);}}
+  gl.uniform1f(PT.uWave,0);
   gl.depthMask(true);gl.disable(gl.BLEND);
 }
 /* ========== 5. player, NPCs, physics, camera, raycast ========== */
@@ -1272,6 +1329,7 @@ function collectAt(hit,sx,sy){
     hit.x>=GARD.x0&&hit.x<=GARD.x1&&hit.z>=GARD.z0&&hit.z<=GARD.z1;
   edit(hit.x,hit.y,hit.z,B.air);
   sPick();
+  burst(hit.x+0.5,hit.y+0.45,hit.z+0.5,8,'#ffe066',1.4,1.8,4,0.08);
   addItem(it,1,sx,sy);
   if(wasBerryGame){mini.count++;updateHUD();
     if(mini.count>=MINI.berry.goal)endMini(true);}
@@ -1537,6 +1595,7 @@ function plotStamp(m,x,z){
   syncPlotEnts();
   markRegion(x-7,z-7,x+7,z+7);
   sPlace();
+  burst(x+0.5,PLOT.g+0.7,z+0.5,10,'#ffffff',2,2,4.5,0.09);
 }
 function placeModel(md,x,z){
   const m=md.id==='lodge'?6:(md.id==='shroomH'||md.id==='tower'?4:(md.id==='hut'?4:1));
@@ -1846,11 +1905,26 @@ function frame(now){
   const dt=Math.min(0.05,(now-lastT)/1000);lastT=now;
   const t=now/1000;
   pollGamepad(dt);keyCam(dt);
+  const wasWater=P.inWater,wasGround=P.onGround,fallVy=P.vy;
   if(!modalOpen){
     updatePlayer(dt);
     checkPads(dt);
     updateMini(dt);
   }
+  /* juice: splash on water entry, dust puff on hard landings, drifting pollen */
+  if(P.inWater&&!wasWater&&fallVy<-2){
+    burst(P.x,P.y+0.5,P.z,14,'#cfeeff',2.6,3.2,9,0.12);sSplash();}
+  if(P.onGround&&!wasGround&&fallVy<-7)
+    burst(P.x,P.y+0.15,P.z,8,'#d9c99e',1.8,0.9,2.5,0.1);
+  frame._pol=(frame._pol||0)+dt;
+  if(frame._pol>0.5){frame._pol=0;
+    const bio=bioMap[Math.floor(P.z)*W+Math.floor(P.x)];
+    if((bio===0||bio===1)&&PARTS.length<120){
+      const a=Math.random()*Math.PI*2,r=3+Math.random()*7;
+      const px2=P.x+Math.sin(a)*r,pz2=P.z+Math.cos(a)*r;
+      spawnPart(px2,groundY(px2,pz2)+0.8+Math.random()*1.6,pz2,
+        0.25,0.12,0.18,4+Math.random()*3,'#fff6c0',0.05,0);}}
+  updateParts(dt);
   abtnsEl.classList.toggle('dim',P.moving&&!modalOpen&&!dialog.npc);
   for(const n of NPCS)if(Math.hypot(n.x-P.x,n.z-P.z)<48)updateNPC(n,dt);
   updateBangs();
@@ -1867,9 +1941,10 @@ function frame(now){
     for(const r of REMOTES.values())drawCritter(r,t);
     for(const c2 of COINSE)if(!c2.got)drawCoinEnt(c2,t);
     for(const f of FLIES)if(!f.got)drawFly(f,t);
-    /* blob shadows (soft, blended) */
+    /* particles + blob shadows (soft, blended) */
     gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
     gl.depthMask(false);
+    drawParts();
     drawShadow(P);
     for(const n of NPCS)if(Math.hypot(n.x-P.x,n.z-P.z)<40)drawShadow(n);
     for(const r of REMOTES.values())drawShadow(r);
