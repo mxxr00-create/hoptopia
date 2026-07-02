@@ -268,6 +268,7 @@ const clamp=(v,a,b)=>v<a?a:v>b?b:v;
 const lerp=(a,b,t)=>a+(b-a)*t;
 const dist2=(ax,az,bx,bz)=>Math.hypot(ax-bx,az-bz);
 
+const HOP_BUILD='7.02a';
 const SAVE_KEY='hoptopia1';
 const DEF_SAVE={started:false,critter:'frog',mode:'',coins:0,inv:{},quests:{},best:{},plot:[],pos:null,sound:true,music:true,tut:false,outfit:{hat:'none',neck:'none'},wardrobe:{}};
 let SV=loadSave();
@@ -2114,7 +2115,7 @@ function applyMode(){
 }
 function openPause(){
   if(modalOpen){closeModal();return;}
-  openModal('<h2>Paused</h2><p class="dim">HOPTOPIA · a Lilypad game</p>',
+  openModal('<h2>Paused</h2><p class="dim">HOPTOPIA · build '+HOP_BUILD+'</p>',
     [['▶ Keep playing','',closeModal],
      [MP?(MP.role==='host'?'Play Together · hosting':'Play Together · visiting'):'Play Together','blue',()=>{closeModal();mpPanel();}],
      ['How to play','blue',openHelp],
@@ -2526,8 +2527,9 @@ function mpHostRoom(tree){
     const k=ks[uid]||{};
     MP.knockQ.push({uid,name:String(k.name||'A critter').slice(0,20),critter:SPECIES[k.critter]?k.critter:'frog',
       hat:String(k.hat||'none'),neck:String(k.neck||'none')});
-    sTalk();
-    mpMaybeShowKnock();
+    sPick();
+    if(MP.panelOpen&&modalOpen)mpPanel();  /* live-update the open code panel */
+    else mpMaybeShowKnock();
   }
   const sig=(tree.sig||{})[fbA.uid]||{};
   for(const from in sig)for(const key in sig[from]){
@@ -2612,6 +2614,7 @@ function mpJoinPrompt(){
     [['Hop in!','',()=>{
         const code=($('#codein').value||'').toUpperCase().replace(/[^A-Z0-9-]/g,'');
         if(code.length<8){toast('That code looks too short');return;}
+        openModal('<h2>Looking for that pond…</h2><p>'+code+'</p><p class="dim">one moment!</p>',[]);
         mpTryJoin(code);
       }],
      ['Cancel','gray',closeModal]]);
@@ -2619,8 +2622,9 @@ function mpJoinPrompt(){
 }
 async function mpTryJoin(code){
   try{
-    await fbAuth();
-    const room=await fbGet('rooms/'+code);
+    const slow=new Promise((_,rej)=>setTimeout(()=>rej(new Error('Could not reach the pond server — check the internet connection and try again.')),12000));
+    await Promise.race([fbAuth(),slow]);
+    const room=await Promise.race([fbGet('rooms/'+code),slow]);
     if(!room||!room.host)throw new Error('No pond found with that code — check it letter by letter!');
     if(Date.now()-(room.host.t||0)>120000)throw new Error('That pond isn’t open right now — ask your friend to host again.');
     if(room.locked)throw new Error('That pond is locked. Ask the host to unlock it!');
@@ -2635,6 +2639,7 @@ async function mpJoinBoot(code){
       outSeq:0,outEv:[],lastPosSend:0,lastRelaySend:0,lastHostMsg:Date.now(),knockT:Date.now(),stream:null};
   await fbSet('rooms/'+code+'/knocks/'+fbA.uid,{name:mpMyName(),critter:SV.critter,
     hat:SV.outfit.hat,neck:SV.outfit.neck,t:Date.now()});
+  try{$('#loading .t').textContent='Knock knock! Waiting for the host to let you in…';}catch(e){}
   MP.stream=fbStream('rooms/'+code,t=>mpGuestRoom(t));
   await new Promise((res,rej)=>{
     MP.joinRes=res;MP.joinRej=rej;
@@ -2809,6 +2814,12 @@ function mpPanel(){
   }
   MP.panelOpen=true;
   let rows='';
+  for(const k of MP.knockQ){
+    rows+='<div class="mprow" style="background:#fffbe8"><span class="who"><b>'+k.name+'</b> the '+
+      (SPECIES[k.critter]||SPECIES.frog).name+' wants in!</span>'+
+      '<button data-ok="'+k.uid+'" style="background:linear-gradient(160deg,#7dd13f,#4f9e23)">Let in!</button>'+
+      '<button data-no="'+k.uid+'">No</button></div>';
+  }
   for(const p of MP.peers.values()){
     if(!p.ready)continue;
     rows+='<div class="mprow"><span class="who">'+p.info.name+' the '+(SPECIES[p.info.critter]||SPECIES.frog).name+
@@ -2816,11 +2827,22 @@ function mpPanel(){
   }
   openModal('<h2>Your pond is open!</h2>'+
     '<p>Friends join with this code:</p><div class="mpcode">'+MP.code+'</div>'+
-    (rows||'<p class="dim">Waiting for friends to knock…</p>')+
+    (rows||'<p class="dim">Waiting for friends to knock… this panel updates by itself.</p>')+
     '<div class="mptog"><span>Lock the pond (no new joins)</span><span class="toggle2'+(MP.locked?' on':'')+'" id="tgLock"><b></b></span></div>'+
     '<div class="mptog"><span>Friends can build</span><span class="toggle2'+(MP.allowBuild?' on':'')+'" id="tgBuild"><b></b></span></div>',
     [['Close','',()=>{MP.panelOpen=false;closeModal();}],
      ['Stop hosting','red',()=>{MP.panelOpen=false;closeModal();mpStop();}]]);
+  document.querySelectorAll('[data-ok]').forEach(b=>{
+    b.onclick=()=>{
+      const i=MP.knockQ.findIndex(k=>k.uid===b.dataset.ok);
+      if(i>=0){const k=MP.knockQ.splice(i,1)[0];mpApprove(k);}
+      mpPanel();};});
+  document.querySelectorAll('[data-no]').forEach(b=>{
+    b.onclick=()=>{
+      const i=MP.knockQ.findIndex(k=>k.uid===b.dataset.no);
+      if(i>=0){const k=MP.knockQ.splice(i,1)[0];MP.blocked.add(k.uid);
+        fbDel('rooms/'+MP.code+'/knocks/'+k.uid).catch(()=>{});}
+      mpPanel();};});
   document.querySelectorAll('[data-kick]').forEach(b=>{
     b.onclick=()=>{MP.panelOpen=false;closeModal();mpKick(b.dataset.kick);};});
   const tl=$('#tgLock'),tb=$('#tgBuild');
