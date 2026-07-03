@@ -294,7 +294,7 @@ const clamp=(v,a,b)=>v<a?a:v>b?b:v;
 const lerp=(a,b,t)=>a+(b-a)*t;
 const dist2=(ax,az,bx,bz)=>Math.hypot(ax-bx,az-bz);
 
-const HOP_BUILD='7.04';
+const HOP_BUILD='7.1';
 let GFXPOLY=false; /* 'Smooth' graphics prototype (low-poly terrain + flat colors) */
 const SAVE_KEY='hoptopia1';
 const DEF_SAVE={started:false,critter:'frog',mode:'',coins:0,inv:{},quests:{},best:{},plot:[],pos:null,sound:true,music:true,tut:false,outfit:{hat:'none',neck:'none'},wardrobe:{}};
@@ -465,7 +465,7 @@ function critterSVG(sp){const s=SPECIES[sp];
   (s.teeth?`<rect x="43" y="56" width="6" height="9" rx="1.5" fill="#fff"/><rect x="51" y="56" width="6" height="9" rx="1.5" fill="#fff"/>`:'')+
   `</svg>`;}
 /* ========== 3. world generation ========== */
-const W=320,H=44,D=320,WL=11;
+const W=320,H=72,D=320,WL=11;
 const world=new Uint8Array(W*H*D);
 const colI=(x,z)=>(z*W+x)*H;
 const gb=(x,y,z)=>(x<0||y<0||z<0||x>=W||y>=H||z>=D)?0:world[colI(x,z)+y];
@@ -494,8 +494,9 @@ const CITY={x:120,z:120,r:42,h:13},
       BAY={x:204,z:204,r:16,h:12,g:B.sand},
       COVE={x:204,z:219,r:11,h:8},
       POOL={x:120,z:176,r:13,h:8},
-      GARDEN={x:172,z:96,r:12,h:13};
-const ZONES=[CITY,MAKER,REED,MOSS,BAY,COVE,POOL,GARDEN];
+      GARDEN={x:172,z:96,r:12,h:13},
+      SPLASH={x:160,z:266,r:26,h:13};
+const ZONES=[CITY,MAKER,REED,MOSS,BAY,COVE,POOL,GARDEN,SPLASH];
 const CLEAN=new Set([CITY,MAKER,POOL,GARDEN]);
 function zoneAt(x,z){let best=null,bt=0;
   for(const zn of ZONES){const d=Math.hypot(x-zn.x,z-zn.z);const t=clamp((zn.r-d)/7,0,1);
@@ -722,7 +723,7 @@ const MINI={
   hop:{name:'Lily Hop',pad:null,desc:'Hop across the lily pads to the flag! Fall in the water and you restart at your last checkpoint.',reward:15,again:5},
   berry:{name:'Berry Scramble',pad:null,desc:'Pick 12 berries in the walled garden before the timer runs out!',time:60,goal:12,reward:12,again:5},
   firefly:{name:'Firefly Chase',pad:null,desc:'Catch 8 zippy fireflies around Arcade Plaza!',time:90,goal:8,reward:12,again:5},
-  obby:{name:'Obby Tower',pad:null,desc:'Climb the moving platforms to the top of the tower! Fall and you restart at your last glowing checkpoint.',reward:15,again:5},
+  obby:{name:'Obby Tower',pad:null,desc:'Climb the moving platforms all the way to the sky! Fall and you restart at your last glowing checkpoint.',reward:25,again:8},
 };
 
 function padAt(x,z,g,b,id){
@@ -882,7 +883,7 @@ function buildTowns(){
   lamp(BAY.x+2,BAY.z+16,BAY.h);
 }
 
-function genWorld(){genTerrain();genDecor();buildCity();buildCourse();buildGarden();buildMaker();buildTowns();buildObby();pruneTrees();MINI.obby.start=[OBBY.x+0.5,OBBY.g+0.2,OBBY.z+0.5];}
+function genWorld(){genTerrain();genDecor();buildCity();buildCourse();buildGarden();buildMaker();buildTowns();buildObby();buildWaterPark();pruneTrees();MINI.obby.start=[OBBY.x+0.5,OBBY.g+0.2,OBBY.z+0.5];}
 
 /* ---- NPCs of Hoptopia ---- */
 const NPC_DEFS=[
@@ -948,6 +949,13 @@ const NPC_DEFS=[
 /* ========== 4. WebGL renderer + chunk meshing ========== */
 const canvas=$('#gl');
 const gl=canvas.getContext('webgl',{antialias:true,alpha:false});
+const EXT_DRV=gl.getExtension('OES_standard_derivatives');
+const EXT_DEPTH=gl.getExtension('WEBGL_depth_texture');
+const EXT_ANISO=gl.getExtension('EXT_texture_filter_anisotropic')||gl.getExtension('WEBKIT_EXT_texture_filter_anisotropic');
+let GFXREAL=!!EXT_DEPTH;
+let REALPREF=!/[?&]flat\b/.test(location.search);
+const GFXMV=!/[?&]nomv\b/.test(location.search); /* micro-voxel look (Path 2) — default on */
+function realActive(){return GFXPOLY&&GFXREAL&&REALPREF;}
 function resize(){const dpr=Math.min(window.devicePixelRatio||1,2);
   canvas.width=Math.max(2,Math.floor(innerWidth*dpr));canvas.height=Math.max(2,Math.floor(innerHeight*dpr));
   gl.viewport(0,0,canvas.width,canvas.height);}
@@ -958,40 +966,137 @@ function mkShader(type,src){const s=gl.createShader(type);gl.shaderSource(s,src)
 function mkProg(vs,fs){const p=gl.createProgram();
   gl.attachShader(p,mkShader(gl.VERTEX_SHADER,vs));gl.attachShader(p,mkShader(gl.FRAGMENT_SHADER,fs));
   gl.linkProgram(p);if(!gl.getProgramParameter(p,gl.LINK_STATUS))console.error('link',gl.getProgramInfoLog(p));return p;}
+/* some driver stacks reject the derivatives directive while supporting the
+   builtins (core in ES3-backed contexts) — try both, report what worked */
+function mkProgDrv(vs,fs){
+  for(const f of [fs,fs.replace(/^#extension[^\n]*\n/,'')]){
+    const sh=gl.createShader(gl.FRAGMENT_SHADER);
+    gl.shaderSource(sh,f);gl.compileShader(sh);
+    if(!gl.getShaderParameter(sh,gl.COMPILE_STATUS))continue;
+    const p=gl.createProgram();
+    gl.attachShader(p,mkShader(gl.VERTEX_SHADER,vs));gl.attachShader(p,sh);
+    gl.linkProgram(p);
+    if(gl.getProgramParameter(p,gl.LINK_STATUS))return p;
+  }
+  return null;
+}
 
 const TERR_VS=`attribute vec3 aP;attribute vec2 aT;attribute float aL;attribute float aS;
-uniform mat4 uMVP;uniform vec3 uCam;uniform float uTime;
-varying vec2 vT;varying float vL;varying float vD;varying vec3 vWP;
+uniform mat4 uMVP;uniform mat4 uShadowM;uniform vec3 uCam;uniform float uTime;
+varying vec2 vT;varying float vL;varying float vD;varying vec3 vWP;varying vec4 vSC;
 void main(){
   vec3 p=aP;
   float ph=uTime*2.0+aP.x*1.4+aP.z*1.8;
-  if(aS>1.5){p.y+=sin(ph)*0.045;}                 /* water bob */
+  if(aS>1.5){p.y+=sin(ph)*0.04+sin(uTime*0.9+aP.x*0.28+aP.z*0.36)*0.085;} /* rolling swell */
   else if(aS>0.5){p.x+=sin(ph)*0.08;p.z+=cos(ph*0.9)*0.05;} /* plant sway */
   gl_Position=uMVP*vec4(p,1.0);
-  vT=aT;vL=aL;vD=distance(p,uCam);vWP=p;}`;
-const TERR_FS=`precision mediump float;
-varying vec2 vT;varying float vL;varying float vD;varying vec3 vWP;
-uniform sampler2D uTex;uniform float uAlpha;uniform vec3 uFog;uniform vec2 uFogD;
-uniform highp float uTime;uniform float uWave;uniform float uAmb;
+  vT=aT;vL=aL;vD=distance(p,uCam);vWP=p;
+  vSC=uShadowM*vec4(p,1.0);}`;
+const TERR_FS=`#extension GL_OES_standard_derivatives : enable
+precision mediump float;
+varying vec2 vT;varying float vL;varying float vD;varying vec3 vWP;varying vec4 vSC;
+uniform sampler2D uTex;uniform sampler2D uShadow;
+uniform float uAlpha;uniform vec3 uFog;uniform vec2 uFogD;
+uniform highp float uTime;uniform float uWave;uniform float uAmb;uniform float uReal;
+uniform highp vec3 uCam;uniform vec3 uSunD;uniform vec3 uSunC;uniform vec3 uAmbC;uniform vec3 uSkyC;
+float shadowAt(float ndl){
+  vec3 sc=vSC.xyz/vSC.w;
+  if(sc.x<0.01||sc.x>0.99||sc.y<0.01||sc.y>0.99||sc.z>0.995)return 1.0;
+  float bias=max(0.006*(1.0-ndl),0.0018);
+  float s=0.0;float tx=1.0/1024.0;
+  for(int i=0;i<4;i++){
+    vec2 off=vec2(float(i-(i/2)*2)-0.5,float(i/2)-0.5)*tx*1.6;
+    s+=(sc.z-bias>texture2D(uShadow,sc.xy+off).r)?0.0:1.0;
+  }
+  return 0.25*s;
+}
 void main(){vec4 c=texture2D(uTex,vT);if(c.a<0.4)discard;
-vec3 col=c.rgb*vL;
-if(uWave>0.5){
-  float s=sin(uTime*2.6+vWP.x*1.9+vWP.z*2.4)+sin(uTime*1.7+vWP.x*3.1-vWP.z*1.3);
-  col*=1.0+0.05*s;}
-col*=uAmb;
+vec3 col;float aOut=uAlpha;
+if(uReal>0.5){
+  vec3 V=normalize(uCam-vWP);
+  if(uWave>0.5){
+    float dhx=0.056*cos(uTime*2.0+vWP.x*1.4+vWP.z*1.8)+0.024*cos(uTime*0.9+vWP.x*0.28+vWP.z*0.36)
+             +0.05*cos(uTime*3.1+vWP.x*5.3+vWP.z*2.1);
+    float dhz=0.072*cos(uTime*2.0+vWP.x*1.4+vWP.z*1.8)+0.031*cos(uTime*0.9+vWP.x*0.28+vWP.z*0.36)
+             +0.05*cos(uTime*2.7+vWP.x*2.4+vWP.z*6.1);
+    vec3 N=normalize(vec3(-dhx*6.0,1.0,-dhz*6.0));
+    float ndl=max(dot(N,uSunD),0.0);
+    float sh=shadowAt(ndl);
+    float F=0.05+0.95*pow(1.0-max(dot(N,V),0.0),5.0);
+    vec3 base=c.rgb*(uAmbC+uSunC*ndl*sh);
+    col=mix(base,uSkyC*1.1,clamp(F*0.8,0.0,0.85));
+    vec3 H=normalize(uSunD+V);
+    col+=uSunC*pow(max(dot(N,H),0.0),130.0)*2.4*sh;
+    aOut=clamp(0.66+F*0.32,0.0,0.95);
+  }else{
+    vec3 N=normalize(cross(dFdx(vWP),dFdy(vWP)));
+    N*=sign(dot(N,V)+0.0001);
+    float ndl=max(dot(N,uSunD),0.0);
+    float sh=shadowAt(ndl);
+    float ao=mix(0.7,1.06,clamp((vL-0.4)/0.68,0.0,1.0));
+    col=c.rgb*(uAmbC+uSunC*ndl*sh)*ao;
+  }
+}else{
+  col=c.rgb*vL;
+  if(uWave>0.5){
+    float s=sin(uTime*2.6+vWP.x*1.9+vWP.z*2.4)+sin(uTime*1.7+vWP.x*3.1-vWP.z*1.3);
+    col*=1.0+0.05*s;}
+  col*=uAmb;
+}
 float f=clamp((vD-uFogD.x)/(uFogD.y-uFogD.x),0.0,1.0);
-gl_FragColor=vec4(mix(col,uFog,f),uAlpha);}`;
+gl_FragColor=vec4(mix(col,uFog,f),aOut);}`;
 const ENT_VS=`attribute vec3 aP;attribute float aL;
-uniform mat4 uPV;uniform mat4 uM;uniform vec3 uCam;
-varying float vL;varying float vD;
-void main(){vec4 wp=uM*vec4(aP,1.0);gl_Position=uPV*wp;vL=aL;vD=distance(wp.xyz,uCam);}`;
-const ENT_FS=`precision mediump float;
-varying float vL;varying float vD;
+uniform mat4 uPV;uniform mat4 uM;uniform mat4 uShadowM;uniform vec3 uCam;
+varying float vL;varying float vD;varying vec3 vWP;varying vec4 vSC;
+void main(){vec4 wp=uM*vec4(aP,1.0);gl_Position=uPV*wp;vL=aL;
+vD=distance(wp.xyz,uCam);vWP=wp.xyz;vSC=uShadowM*wp;}`;
+const ENT_FS=`#extension GL_OES_standard_derivatives : enable
+precision mediump float;
+varying float vL;varying float vD;varying vec3 vWP;varying vec4 vSC;
 uniform vec3 uCol;uniform vec3 uFog;uniform vec2 uFogD;uniform float uEAlpha;uniform float uAmb;
-void main(){float f=clamp((vD-uFogD.x)/(uFogD.y-uFogD.x),0.0,1.0);
-gl_FragColor=vec4(mix(uCol*vL*uAmb,uFog,f),uEAlpha);}`;
+uniform float uReal;uniform float uEmis;uniform sampler2D uShadow;
+uniform highp vec3 uCam;uniform vec3 uSunD;uniform vec3 uSunC;uniform vec3 uAmbC;
+void main(){
+vec3 col;
+if(uReal>0.5&&uEmis<0.5){
+  vec3 V=normalize(uCam-vWP);
+  vec3 N=normalize(cross(dFdx(vWP),dFdy(vWP)));
+  N*=sign(dot(N,V)+0.0001);
+  float ndl=max(dot(N,uSunD),0.0);
+  vec3 sc=vSC.xyz/vSC.w;float sh=1.0;
+  if(sc.x>0.01&&sc.x<0.99&&sc.y>0.01&&sc.y<0.99&&sc.z<0.995){
+    float bias=max(0.006*(1.0-ndl),0.0018);
+    sh=(sc.z-bias>texture2D(uShadow,sc.xy).r)?0.25:1.0;
+  }
+  float ao=mix(0.78,1.04,clamp((vL-0.4)/0.68,0.0,1.0));
+  col=uCol*(uAmbC+uSunC*ndl*sh)*ao;
+  vec3 H=normalize(uSunD+V);
+  col+=uSunC*pow(max(dot(N,H),0.0),42.0)*0.18*sh;
+}else{col=uCol*vL*uAmb;}
+float f=clamp((vD-uFogD.x)/(uFogD.y-uFogD.x),0.0,1.0);
+gl_FragColor=vec4(mix(col,uFog,f),uEAlpha);}`;
+/* depth-only programs for the shadow pass */
+const DEP_VS=`attribute vec3 aP;attribute vec2 aT;attribute float aS;
+uniform mat4 uMVP;uniform float uTime;varying vec2 vT;
+void main(){vec3 p=aP;
+float ph=uTime*2.0+aP.x*1.4+aP.z*1.8;
+if(aS>0.5&&aS<1.5){p.x+=sin(ph)*0.08;p.z+=cos(ph*0.9)*0.05;}
+gl_Position=uMVP*vec4(p,1.0);vT=aT;}`;
+const DEP_FS=`precision mediump float;varying vec2 vT;uniform sampler2D uTex;
+void main(){if(texture2D(uTex,vT).a<0.4)discard;gl_FragColor=vec4(1.0);}`;
+const DEPE_VS=`attribute vec3 aP;uniform mat4 uPV;uniform mat4 uM;
+void main(){gl_Position=uPV*(uM*vec4(aP,1.0));}`;
+const DEPE_FS=`precision mediump float;void main(){gl_FragColor=vec4(1.0);}`;
 
-const PT={p:mkProg(TERR_VS,TERR_FS)},PE={p:mkProg(ENT_VS,ENT_FS)};
+const _ptP=mkProgDrv(TERR_VS,TERR_FS),_peP=mkProgDrv(ENT_VS,ENT_FS);
+if(!_ptP||!_peP)GFXREAL=false;
+const PT={p:_ptP||mkProg(TERR_VS,TERR_FS.replace(/^#extension[^\n]*\n/,'').replace(/dFdx\(vWP\)/g,'vec3(0.,1.,0.)').replace(/dFdy\(vWP\)/g,'vec3(0.,0.,1.)'))},
+      PE={p:_peP||mkProg(ENT_VS,ENT_FS.replace(/^#extension[^\n]*\n/,'').replace(/dFdx\(vWP\)/g,'vec3(0.,1.,0.)').replace(/dFdy\(vWP\)/g,'vec3(0.,0.,1.)'))},
+      PD={p:mkProg(DEP_VS,DEP_FS)},PDE={p:mkProg(DEPE_VS,DEPE_FS)};
+PD.aP=gl.getAttribLocation(PD.p,'aP');PD.aT=gl.getAttribLocation(PD.p,'aT');PD.aS=gl.getAttribLocation(PD.p,'aS');
+PD.uMVP=gl.getUniformLocation(PD.p,'uMVP');PD.uTime=gl.getUniformLocation(PD.p,'uTime');PD.uTex=gl.getUniformLocation(PD.p,'uTex');
+PDE.aP=gl.getAttribLocation(PDE.p,'aP');
+PDE.uPV=gl.getUniformLocation(PDE.p,'uPV');PDE.uM=gl.getUniformLocation(PDE.p,'uM');
 PT.aP=gl.getAttribLocation(PT.p,'aP');PT.aT=gl.getAttribLocation(PT.p,'aT');PT.aL=gl.getAttribLocation(PT.p,'aL');
 PT.aS=gl.getAttribLocation(PT.p,'aS');
 PT.uMVP=gl.getUniformLocation(PT.p,'uMVP');PT.uCam=gl.getUniformLocation(PT.p,'uCam');
@@ -999,11 +1104,19 @@ PT.uTex=gl.getUniformLocation(PT.p,'uTex');PT.uAlpha=gl.getUniformLocation(PT.p,
 PT.uFog=gl.getUniformLocation(PT.p,'uFog');PT.uFogD=gl.getUniformLocation(PT.p,'uFogD');
 PT.uTime=gl.getUniformLocation(PT.p,'uTime');PT.uWave=gl.getUniformLocation(PT.p,'uWave');
 PT.uAmb=gl.getUniformLocation(PT.p,'uAmb');
+PT.uReal=gl.getUniformLocation(PT.p,'uReal');PT.uShadow=gl.getUniformLocation(PT.p,'uShadow');
+PT.uShadowM=gl.getUniformLocation(PT.p,'uShadowM');PT.uSunD=gl.getUniformLocation(PT.p,'uSunD');
+PT.uSunC=gl.getUniformLocation(PT.p,'uSunC');PT.uAmbC=gl.getUniformLocation(PT.p,'uAmbC');
+PT.uSkyC=gl.getUniformLocation(PT.p,'uSkyC');
 PE.aP=gl.getAttribLocation(PE.p,'aP');PE.aL=gl.getAttribLocation(PE.p,'aL');
 PE.uPV=gl.getUniformLocation(PE.p,'uPV');PE.uM=gl.getUniformLocation(PE.p,'uM');PE.uCam=gl.getUniformLocation(PE.p,'uCam');
 PE.uCol=gl.getUniformLocation(PE.p,'uCol');PE.uFog=gl.getUniformLocation(PE.p,'uFog');PE.uFogD=gl.getUniformLocation(PE.p,'uFogD');
 PE.uEAlpha=gl.getUniformLocation(PE.p,'uEAlpha');
 PE.uAmb=gl.getUniformLocation(PE.p,'uAmb');
+PE.uReal=gl.getUniformLocation(PE.p,'uReal');PE.uEmis=gl.getUniformLocation(PE.p,'uEmis');
+PE.uShadow=gl.getUniformLocation(PE.p,'uShadow');PE.uShadowM=gl.getUniformLocation(PE.p,'uShadowM');
+PE.uSunD=gl.getUniformLocation(PE.p,'uSunD');PE.uSunC=gl.getUniformLocation(PE.p,'uSunC');
+PE.uAmbC=gl.getUniformLocation(PE.p,'uAmbC');
 
 const tex=gl.createTexture();
 gl.bindTexture(gl.TEXTURE_2D,tex);
@@ -1046,6 +1159,204 @@ const palTex=gl.createTexture();
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
 })();
+/* ---- Phase 4 realistic pipeline: procedural material atlas (256px tiles) ---- */
+const hiTex=gl.createTexture();
+(function(){
+  const S=256,c=document.createElement('canvas');c.width=c.height=4096;
+  const g2=c.getContext('2d');
+  g2.fillStyle='#79b843';g2.fillRect(0,0,4096,4096);
+  let seed=99;
+  const rnd=()=>{seed=(seed*1103515245+12345)&0x7fffffff;return seed/0x7fffffff;};
+  const tmp=document.createElement('canvas');tmp.width=tmp.height=S;
+  const tg=tmp.getContext('2d');
+  const shade2=(r,g3,b,m)=>'rgb('+Math.min(255,r*m|0)+','+Math.min(255,g3*m|0)+','+Math.min(255,b*m|0)+')';
+  function grain(r,g3,b,n,a,s1,s2){ /* speckle field */
+    for(let i=0;i<n;i++){
+      tg.fillStyle=shade2(r,g3,b,0.62+rnd()*0.75);
+      tg.globalAlpha=a;
+      const w=s1+rnd()*(s2-s1);
+      tg.fillRect(rnd()*S,rnd()*S,w,w);
+    }
+    tg.globalAlpha=1;
+  }
+  for(let t=1;t<=46;t++){
+    const src=ac.getImageData((t&15)*16,(t>>4)*16,16,16);
+    let r=0,g3=0,b=0,n=0;
+    for(let i=0;i<src.data.length;i+=4)if(src.data[i+3]>40){r+=src.data[i];g3+=src.data[i+1];b+=src.data[i+2];n++;}
+    if(!n)continue;r/=n;g3/=n;b/=n;
+    seed=t*7919+13;
+    tg.clearRect(0,0,S,S);
+    tg.fillStyle=shade2(r,g3,b,1);tg.fillRect(0,0,S,S);
+    if(t===1){ /* grass: soil base + hundreds of blade strokes */
+      tg.fillStyle=shade2(r*0.55,g3*0.5,b*0.5,1);tg.fillRect(0,0,S,S);
+      grain(r*0.5,g3*0.45,b*0.45,300,0.5,2,5);
+      for(let i=0;i<900;i++){
+        const bx=rnd()*S,by=rnd()*S,len=8+rnd()*16,ang=(rnd()-0.5)*0.9;
+        tg.strokeStyle=shade2(r,g3,b,0.72+rnd()*0.66);
+        tg.globalAlpha=0.85;tg.lineWidth=1.6+rnd()*1.6;
+        tg.beginPath();tg.moveTo(bx,by);
+        tg.lineTo(bx+Math.sin(ang)*len,by-len*(0.7+rnd()*0.5));tg.stroke();
+      }
+      tg.globalAlpha=1;
+    }else if(t===3||t===22){ /* dirt/mud: clumps + pebbles */
+      grain(r,g3,b,2200,0.45,2,7);
+      for(let i=0;i<46;i++){
+        const px2=rnd()*S,py=rnd()*S,pr=2+rnd()*5,m=0.6+rnd()*0.7;
+        tg.fillStyle=shade2(r*1.1,g3*1.06,b*1.05,m);
+        tg.beginPath();tg.ellipse(px2,py,pr,pr*0.75,rnd()*3,0,7);tg.fill();
+        tg.fillStyle='rgba(0,0,0,0.25)';
+        tg.beginPath();tg.ellipse(px2,py+pr*0.55,pr*0.9,pr*0.3,0,0,7);tg.fill();
+      }
+    }else if(t===4){ /* sand: grain + ripples */
+      grain(r,g3,b,2600,0.4,1,4);
+      tg.globalAlpha=0.14;
+      for(let i=0;i<7;i++){
+        tg.strokeStyle=shade2(r*0.7,g3*0.7,b*0.7,1);tg.lineWidth=5+rnd()*7;
+        tg.beginPath();
+        for(let x2=0;x2<=S;x2+=16)tg.lineTo(x2,i*38+14+Math.sin(x2*0.05+i)*7);
+        tg.stroke();
+      }
+      tg.globalAlpha=1;
+    }else if(t===5||t===26){ /* stone/path: cobbles via jittered cells */
+      const pts=[];for(let i=0;i<20;i++)pts.push([rnd()*S,rnd()*S,0.78+rnd()*0.5]);
+      const img=tg.getImageData(0,0,S,S);
+      for(let py=0;py<S;py+=2)for(let px2=0;px2<S;px2+=2){
+        let d1=1e9,d2=1e9,m=1;
+        for(const p of pts){
+          const dx=Math.min(Math.abs(px2-p[0]),S-Math.abs(px2-p[0]));
+          const dy=Math.min(Math.abs(py-p[1]),S-Math.abs(py-p[1]));
+          const d=dx*dx+dy*dy;
+          if(d<d1){d2=d1;d1=d;m=p[2];}else if(d<d2)d2=d;
+        }
+        const edge=Math.sqrt(d2)-Math.sqrt(d1);
+        const mm=(edge<7?0.55:m)*(0.92+((px2*7+py*13)%17)/170);
+        for(let oy=0;oy<2;oy++)for(let ox=0;ox<2;ox++){
+          const i=((py+oy)*S+px2+ox)*4;
+          img.data[i]=Math.min(255,r*mm);img.data[i+1]=Math.min(255,g3*mm);img.data[i+2]=Math.min(255,b*mm);
+        }
+      }
+      tg.putImageData(img,0,0);
+    }else if(t===8||t===40){ /* bark: vertical fissures */
+      grain(r,g3,b,700,0.4,2,5);
+      for(let i=0;i<26;i++){
+        const bx=rnd()*S;
+        tg.strokeStyle=shade2(r*0.55,g3*0.55,b*0.55,1);
+        tg.globalAlpha=0.55;tg.lineWidth=2+rnd()*4;
+        tg.beginPath();tg.moveTo(bx,0);
+        for(let y2=0;y2<=S;y2+=32)tg.lineTo(bx+Math.sin(y2*0.04+i*3)*9,y2);
+        tg.stroke();
+      }
+      tg.globalAlpha=1;
+    }else if(t===23||t===28){ /* planks: boards + grain + knots */
+      for(let bd=0;bd<4;bd++){
+        const y0=bd*64,m=0.9+rnd()*0.2;
+        tg.fillStyle=shade2(r,g3,b,m);tg.fillRect(0,y0,S,64);
+        for(let i=0;i<22;i++){
+          tg.strokeStyle=shade2(r*0.78,g3*0.76,b*0.74,0.9+rnd()*0.3);
+          tg.globalAlpha=0.4;tg.lineWidth=1.4;
+          const gy=y0+6+rnd()*52;
+          tg.beginPath();
+          for(let x2=0;x2<=S;x2+=32)tg.lineTo(x2,gy+Math.sin(x2*0.02+i)*3);
+          tg.stroke();
+        }
+        tg.globalAlpha=1;
+        if(rnd()>0.5){
+          const kx=rnd()*S,ky=y0+16+rnd()*32;
+          tg.fillStyle=shade2(r*0.6,g3*0.58,b*0.55,1);
+          tg.beginPath();tg.ellipse(kx,ky,7,5,0.4,0,7);tg.fill();
+        }
+        tg.fillStyle='rgba(0,0,0,0.5)';tg.fillRect(0,y0+61,S,3);
+      }
+    }else if(t===9||t===39){ /* leaves: dense clusters */
+      tg.fillStyle=shade2(r*0.62,g3*0.6,b*0.6,1);tg.fillRect(0,0,S,S);
+      for(let i=0;i<260;i++){
+        const lx=rnd()*S,ly=rnd()*S,lr=7+rnd()*12,m=0.72+rnd()*0.62;
+        tg.fillStyle=shade2(r,g3,b,m);
+        tg.beginPath();tg.ellipse(lx,ly,lr,lr*0.62,rnd()*3.2,0,7);tg.fill();
+        tg.fillStyle='rgba(0,20,0,0.2)';
+        tg.beginPath();tg.ellipse(lx,ly+lr*0.4,lr*0.9,lr*0.28,0,0,7);tg.fill();
+      }
+    }else if(t===24||t===25){ /* shingles: scalloped rows */
+      for(let row=0;row<6;row++){
+        const y0=row*43,off=(row%2)*32;
+        for(let sx2=-1;sx2<7;sx2++){
+          const x0=sx2*64+off,m=0.82+rnd()*0.4;
+          tg.fillStyle=shade2(r,g3,b,m);
+          tg.beginPath();
+          tg.moveTo(x0,y0);tg.lineTo(x0+64,y0);tg.lineTo(x0+64,y0+30);
+          tg.arc(x0+32,y0+30,32,0,Math.PI);tg.closePath();tg.fill();
+          tg.fillStyle='rgba(0,0,30,0.3)';
+          tg.beginPath();tg.arc(x0+32,y0+30,32,0.15,Math.PI-0.15);
+          tg.lineTo(x0+3,y0+30);tg.closePath();tg.fill();
+        }
+      }
+    }else{
+      grain(r,g3,b,650,0.3,2,6);
+    }
+    /* preserve source silhouette (fence, flag, foam) */
+    let hasAlpha=false;
+    for(let i=3;i<src.data.length;i+=4)if(src.data[i]<40){hasAlpha=true;break;}
+    if(hasAlpha){
+      tg.globalCompositeOperation='destination-in';
+      const mc=document.createElement('canvas');mc.width=mc.height=16;
+      mc.getContext('2d').putImageData(src,0,0);
+      tg.imageSmoothingEnabled=false;
+      tg.drawImage(mc,0,0,S,S);
+      tg.imageSmoothingEnabled=true;
+      tg.globalCompositeOperation='source-over';
+    }
+    g2.drawImage(tmp,(t&15)*S,(t>>4)*S);
+  }
+  gl.bindTexture(gl.TEXTURE_2D,hiTex);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,c);
+  gl.generateMipmap(gl.TEXTURE_2D);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  if(EXT_ANISO)gl.texParameterf(gl.TEXTURE_2D,EXT_ANISO.TEXTURE_MAX_ANISOTROPY_EXT,8);
+})();
+/* shadow map */
+const SHADOW_SZ=1024;
+let shadowTex=null,shadowFB=null,SHADOWM=new Float32Array(16),SHADOWM_RAW=new Float32Array(16);
+if(GFXREAL){
+  shadowTex=gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D,shadowTex);
+  gl.texImage2D(gl.TEXTURE_2D,0,gl.DEPTH_COMPONENT,SHADOW_SZ,SHADOW_SZ,0,gl.DEPTH_COMPONENT,gl.UNSIGNED_INT,null);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+  const colRB=gl.createRenderbuffer();
+  gl.bindRenderbuffer(gl.RENDERBUFFER,colRB);
+  gl.renderbufferStorage(gl.RENDERBUFFER,gl.RGBA4,SHADOW_SZ,SHADOW_SZ);
+  shadowFB=gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER,shadowFB);
+  gl.framebufferRenderbuffer(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.RENDERBUFFER,colRB);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.DEPTH_ATTACHMENT,gl.TEXTURE_2D,shadowTex,0);
+  if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)!==gl.FRAMEBUFFER_COMPLETE)GFXREAL=false;
+  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+}
+/* sun state: direction + colors follow the real clock */
+const SUN={d:[0.42,0.75,0.33],c:[1.05,0.98,0.9],a:[0.42,0.5,0.62],sky:[0.62,0.82,0.95]};
+function calcSun(){
+  const h=todNow();
+  const mixv=(a,b,f)=>a.map((x,i)=>x*(1-f)+b[i]*f);
+  const nightD=[0.4,0.72,0.5],nightC=[0.09,0.11,0.2],nightA=[0.11,0.14,0.26],nightS=[0.08,0.11,0.24];
+  if(DAYA<=0.03){SUN.d=nightD;SUN.c=nightC;SUN.a=nightA;SUN.sky=nightS;return;}
+  const f=clamp((h-5.8)/14.4,0.02,0.98);
+  const az=Math.PI*(1-f),el=0.2+1.0*Math.sin(Math.PI*f);
+  let d=[Math.cos(az)*Math.cos(el),Math.sin(el),0.42*Math.cos(el)+0.1];
+  const dl=Math.hypot(d[0],d[1],d[2]);d=d.map(x=>x/dl);
+  const warm=1-Math.min(1,Math.sin(Math.PI*f)*1.7);
+  const dayC=[1.12,1.0-warm*0.28,0.88-warm*0.4];
+  const dayA=[0.4+0.12*warm,0.47-0.02*warm,0.6-0.14*warm];
+  const dayS=[0.62-warm*0.15,0.8-warm*0.3,0.95-warm*0.35];
+  SUN.d=mixv(nightD,d,DAYA);
+  SUN.c=mixv(nightC,dayC,DAYA);
+  SUN.a=mixv(nightA,dayA,DAYA);
+  SUN.sky=mixv(nightS,dayS,DAYA);
+}
 gl.enable(gl.DEPTH_TEST);
 gl.clearColor(0.62,0.824,0.949,1);
 const FOG=[0.62,0.824,0.949],FOGD=[80,126],VIEW_DIST=136;
@@ -1060,6 +1371,10 @@ function mT(x,y,z){return new Float32Array([1,0,0,0,0,1,0,0,0,0,1,0,x,y,z,1]);}
 function mS(x,y,z){return new Float32Array([x,0,0,0,0,y,0,0,0,0,z,0,0,0,0,1]);}
 function mRY(a){const c=Math.cos(a),s=Math.sin(a);return new Float32Array([c,0,-s,0,0,1,0,0,s,0,c,0,0,0,0,1]);}
 function mRX(a){const c=Math.cos(a),s=Math.sin(a);return new Float32Array([1,0,0,0,0,c,s,0,0,-s,c,0,0,0,0,1]);}
+function mOrtho(l,r2,b,t2,n,f){
+  return new Float32Array([2/(r2-l),0,0,0, 0,2/(t2-b),0,0, 0,0,-2/(f-n),0,
+    -(r2+l)/(r2-l),-(t2+b)/(t2-b),-(f+n)/(f-n),1]);}
+const BIASM=new Float32Array([0.5,0,0,0, 0,0.5,0,0, 0,0,0.5,0, 0.5,0.5,0.5,1]);
 function mLook(ex,ey,ez,tx,ty,tz){
   let zx=ex-tx,zy=ey-ty,zz=ez-tz;const zl=Math.hypot(zx,zy,zz)||1;zx/=zl;zy/=zl;zz/=zl;
   let xx=zz,xy=0,xz=-zx;const xl=Math.hypot(xx,xy,xz)||1;xx/=xl;xy/=xl;xz/=xl;
@@ -1146,33 +1461,82 @@ function effHG(x,z){
   const n=natTopAt(x,z);
   return n>0?n:TERR_H[z*W+x];
 }
+const CHW=[1,2,2,1]; /* radius-2 tent filter: terraces become rolling hills */
+const CHMEMO=new Map();
 function cornerHG(cx,cz){
-  return (effHG(cx-1,cz-1)+effHG(cx,cz-1)+effHG(cx-1,cz)+effHG(cx,cz))/4;
+  const k=cx*1024+cz;
+  const m=CHMEMO.get(k);
+  if(m!==undefined)return m;
+  let sum=0;
+  for(let j=-2;j<=1;j++)for(let i=-2;i<=1;i++)
+    sum+=effHG(cx+i,cz+j)*CHW[i+2]*CHW[j+2];
+  const h=sum/36;
+  CHMEMO.set(k,h);
+  return h;
+}
+function clearHGMemo(){CHMEMO.clear();}
+/* Phase 4: heights on the third-grid — cosine-blended corner heights plus
+   two octaves of seeded relief. Absolute-coord seeding keeps edges crack-free. */
+function subH(x3,z3){
+  const x0=Math.floor(x3/3),z0=Math.floor(z3/3);
+  const fx=(x3-x0*3)/3,fz=(z3-z0*3)/3;
+  const c00=cornerHG(x0,z0),c10=cornerHG(x0+1,z0),c01=cornerHG(x0,z0+1),c11=cornerHG(x0+1,z0+1);
+  const u=0.5-0.5*Math.cos(fx*Math.PI),v=0.5-0.5*Math.cos(fz*Math.PI);
+  let h=c00*(1-u)*(1-v)+c10*u*(1-v)+c01*(1-u)*v+c11*u*v;
+  if(fx>0.001||fz>0.001)
+    h+=(hash2(x3*7+3,z3*11+5)-0.5)*0.11+(hash2(x3*13+1,z3*5+8)-0.5)*0.05;
+  return h;
 }
 /* visual ground height under a world position, or -1 off the smooth sheet */
+function smoothGroundYCos(x,z){
+  const x0=Math.floor(x),z0=Math.floor(z);
+  const fx=x-x0,fz=z-z0;
+  const u=0.5-0.5*Math.cos(fx*Math.PI),v=0.5-0.5*Math.cos(fz*Math.PI);
+  return cornerHG(x0,z0)*(1-u)*(1-v)+cornerHG(x0+1,z0)*u*(1-v)
+        +cornerHG(x0,z0+1)*(1-u)*v+cornerHG(x0+1,z0+1)*u*v;
+}
 function smoothGroundY(x,z){
   const xi=Math.floor(x),zi=Math.floor(z);
   if(natTopAt(xi,zi)<0)return -1;
-  const fx=x-xi,fz=z-zi;
-  return lerp(lerp(cornerHG(xi,zi),cornerHG(xi+1,zi),fx),
-              lerp(cornerHG(xi,zi+1),cornerHG(xi+1,zi+1),fx),fz);
+  return smoothGroundYCos(x,z);
 }
 /* walkable ground for NPCs/shadows: sheet when smooth mode, blocks otherwise */
 function walkGroundY(x,z){
   if(GFXPOLY){const s2=smoothGroundY(x,z);if(s2>0)return s2;}
   return groundY(x,z);
 }
-function pushTri(arr,a,b2,c,t,l,s1,s2,s3){
-  const uv=quadUV(t),u=(uv[0]+uv[2])/2,v=(uv[1]+uv[3])/2;
-  arr.push(a[0],a[1],a[2],u,v,l,s1||0, b2[0],b2[1],b2[2],u,v,l,s2||0, c[0],c[1],c[2],u,v,l,s3||0);
+function pushTri(arr,a,b2,c,t,l,s1,s2,s3,uvs){
+  const uv=quadUV(t);
+  let ua,va,ub,vb,uc,vc;
+  if(uvs){
+    const lx=x2=>uv[0]+(uv[2]-uv[0])*clamp(x2,0,1),ly=y2=>uv[1]+(uv[3]-uv[1])*clamp(y2,0,1);
+    ua=lx(uvs[0]);va=ly(uvs[1]);ub=lx(uvs[2]);vb=ly(uvs[3]);uc=lx(uvs[4]);vc=ly(uvs[5]);
+  }else{
+    ua=ub=uc=(uv[0]+uv[2])/2;va=vb=vc=(uv[1]+uv[3])/2;
+  }
+  arr.push(a[0],a[1],a[2],ua,va,l,s1||0, b2[0],b2[1],b2[2],ub,vb,l,s2||0, c[0],c[1],c[2],uc,vc,l,s3||0);
+}
+/* planar per-face UVs for the mini models: project along the dominant normal
+   axis, anchored to the face centroid so triangles never wrap the atlas tile */
+function triUV(a,b2,c){
+  const ux=b2[0]-a[0],uy=b2[1]-a[1],uz=b2[2]-a[2];
+  const vx=c[0]-a[0],vy=c[1]-a[1],vz=c[2]-a[2];
+  const nx=Math.abs(uy*vz-uz*vy),ny=Math.abs(uz*vx-ux*vz),nz=Math.abs(ux*vy-uy*vx);
+  let i1,i2;
+  if(ny>=nx&&ny>=nz){i1=0;i2=2;}else if(nx>=nz){i1=2;i2=1;}else{i1=0;i2=1;}
+  const cx=(a[i1]+b2[i1]+c[i1])/3,cy=(a[i2]+b2[i2]+c[i2])/3;
+  const fx=cx-Math.floor(cx),fy=cy-Math.floor(cy);
+  return [fx+(a[i1]-cx)*0.55,fy+(a[i2]-cy)*0.55,
+          fx+(b2[i1]-cx)*0.55,fy+(b2[i2]-cy)*0.55,
+          fx+(c[i1]-cx)*0.55,fy+(c[i2]-cy)*0.55];
 }
 /* mini-model kit for the smooth style */
 const PLANT3D=new Set([B.flowP,B.flowY,B.berry,B.reed,B.shroom,B.stick,B.pebble,B.shell]);
-function eTri(arr,a,b,c,t,j,s1,s2,s3){pushTri(arr,a,b,c,t,triLight(a,b,c,j||0),s1,s2,s3);}
-function eCone(arr,cx,cy,cz,r,h,t,seed,N){N=N||7;const ap=[cx,cy+h,cz];
+function eTri(arr,a,b,c,t,j,s1,s2,s3){pushTri(arr,a,b,c,t,triLight(a,b,c,j||0),s1,s2,s3,triUV(a,b,c));}
+function eCone(arr,cx,cy,cz,r,h,t,seed,N){N=N||10;const ap=[cx,cy+h,cz];
   for(let i=0;i<N;i++){const a1=seed+i/N*6.2832,a2=seed+(i+1)/N*6.2832;
     eTri(arr,ap,[cx+Math.cos(a1)*r,cy,cz+Math.sin(a1)*r],[cx+Math.cos(a2)*r,cy,cz+Math.sin(a2)*r],t,(i%3-1)*0.02);}}
-function eFrust(arr,cx,cy,cz,r1,r2,h,t,seed,N){N=N||7;
+function eFrust(arr,cx,cy,cz,r1,r2,h,t,seed,N){N=N||10;
   for(let i=0;i<N;i++){const a1=seed+i/N*6.2832,a2=seed+(i+1)/N*6.2832;
     const p1=[cx+Math.cos(a1)*r1,cy,cz+Math.sin(a1)*r1],p2=[cx+Math.cos(a2)*r1,cy,cz+Math.sin(a2)*r1];
     const q1=[cx+Math.cos(a1)*r2,cy+h,cz+Math.sin(a1)*r2],q2=[cx+Math.cos(a2)*r2,cy+h,cz+Math.sin(a2)*r2];
@@ -1182,6 +1546,19 @@ function eBall(arr,cx,cy,cz,r,ry,t,seed,N){N=N||6;
   const top=[cx,cy+ry,cz],bot=[cx,cy-ry,cz];
   for(let i=0;i<N;i++){const p=ring[i],q=ring[(i+1)%N];
     eTri(arr,top,p,q,t,(i%3-1)*0.025);eTri(arr,bot,q,p,t,(i%3-1)*0.025);}}
+/* two-ring faceted sphere: rounder canopies, boulders, blossoms */
+function eBall2(arr,cx,cy,cz,r,ry,t,seed,N){N=N||9;
+  const ru=r*0.72,yu=ry*0.55,top=[cx,cy+ry,cz],bot=[cx,cy-ry,cz];
+  const R1=[],R2=[],R3=[];
+  for(let i=0;i<N;i++){const a2=seed+i/N*6.2832,ca=Math.cos(a2),sa=Math.sin(a2);
+    R1.push([cx+ca*ru,cy+yu,cz+sa*ru]);
+    R2.push([cx+ca*r,cy,cz+sa*r]);
+    R3.push([cx+ca*ru,cy-yu,cz+sa*ru]);}
+  for(let i=0;i<N;i++){const j=(i+1)%N,f=(i%3-1)*0.03;
+    eTri(arr,top,R1[i],R1[j],t,f);
+    eTri(arr,R1[i],R2[i],R2[j],t,f);eTri(arr,R1[i],R2[j],R1[j],t,f);
+    eTri(arr,R2[i],R3[i],R3[j],t,-f);eTri(arr,R2[i],R3[j],R2[j],t,-f);
+    eTri(arr,bot,R3[j],R3[i],t,-f);}}
 function emitPlant(arr,b,x,py,z,rr){
   const cx=x+0.5,cz=z+0.5,a=rr*6.2832,sc=0.8+rr*0.5;
   switch(b){
@@ -1221,16 +1598,125 @@ function emitPlant(arr,b,x,py,z,rr){
       break;
   }
 }
+/* micro-voxel kit: small cubes with per-voxel tint, inward faces culled */
+const MV_F=[
+ {n:[1,0,0],v:[[1,0,0],[1,1,0],[1,1,1],[1,0,1]],l:0.86},
+ {n:[-1,0,0],v:[[0,0,1],[0,1,1],[0,1,0],[0,0,0]],l:0.72},
+ {n:[0,1,0],v:[[0,1,0],[0,1,1],[1,1,1],[1,1,0]],l:1.06},
+ {n:[0,-1,0],v:[[0,0,0],[1,0,0],[1,0,1],[0,0,1]],l:0.5},
+ {n:[0,0,1],v:[[1,0,1],[1,1,1],[0,1,1],[0,0,1]],l:0.92},
+ {n:[0,0,-1],v:[[0,0,0],[0,1,0],[1,1,0],[1,0,0]],l:0.66}];
+function emitCubeMV(arr,x,y,z,sc,t,tint,odx,ody,odz){
+  const uv=quadUV(t),um=(uv[0]+uv[2])/2,vm=(uv[1]+uv[3])/2;
+  for(const F of MV_F){
+    if(odx!==undefined&&(F.n[0]*odx+F.n[1]*ody+F.n[2]*odz)<-0.15)continue;
+    const l=F.l*tint;
+    for(const k of [0,1,2,0,2,3]){
+      const v=F.v[k];
+      arr.push(x+v[0]*sc,y+v[1]*sc,z+v[2]*sc,um,vm,l,0);
+    }
+  }
+}
+function emitMicroTree(arr,tr){
+  const cx=tr.x+0.5,cz=tr.z+0.5;
+  const sg=smoothGroundY(cx,cz);
+  const base=sg>0?sg:tr.g;
+  const rj=hash2(tr.x*5+1,tr.z*9+4);
+  const ht=tr.ht+1.2,R=1.6+rj*0.9;
+  const G=0.38; /* micro-voxel size */
+  const lean=rj*6.2832,lx=Math.cos(lean)*0.35,lz=Math.sin(lean)*0.35;
+  for(let y2=0;y2<ht;y2+=G){
+    const f=y2/ht,ox=lx*f*f,oz=lz*f*f;
+    for(let a=0;a<2;a++)for(let b2=0;b2<2;b2++){
+      const tint=0.82+hash2(tr.x*3+a+y2*7,tr.z*5+b2)*0.36;
+      emitCubeMV(arr,cx-G+a*G+ox,base+y2,cz-G+b2*G+oz,G,T.cBark,tint);
+    }
+  }
+  const ccx=cx+lx,ccy=base+ht+R*0.55,ccz=cz+lz;
+  const tA=hash2(tr.x*3,tr.z*7)>0.5?T.leaf:T.cLeaf2;
+  const tB=tA===T.leaf?T.cLeaf2:T.leaf;
+  for(let gy=-R;gy<=R;gy+=G)for(let gx=-R;gx<=R;gx+=G)for(let gz=-R;gz<=R;gz+=G){
+    const d=Math.hypot(gx,gy*1.25,gz);
+    if(d>R||d<R-0.5)continue;
+    const h=hash2(tr.x*7+gx*13+gy*29,tr.z*11+gz*17+gy*5);
+    if(h<0.22)continue; /* ragged silhouette */
+    const jx=(hash2(gx*31+1,gz*37+gy*3)-0.5)*0.14,jz=(hash2(gx*17+9,gz*23+gy*7)-0.5)*0.14;
+    const tint=0.7+h*0.55;
+    const dl=d||1;
+    emitCubeMV(arr,ccx+gx+jx,ccy+gy,ccz+gz+jz,G,h>0.6?tA:tB,tint,gx/dl,gy/dl,gz/dl);
+  }
+}
+function emitMicroPlant(arr,b,x,py,z,rr){
+  const cx=x+0.5,cz=z+0.5,G=0.22;
+  if(b===B.berry){
+    for(let k=0;k<7;k++){
+      const a=rr*7+k*0.9,d=0.05+((rr*5+k*0.4)%1)*0.28;
+      emitCubeMV(arr,cx+Math.cos(a)*d-G/2,py+((k*0.13+rr)%1)*0.3,cz+Math.sin(a)*d-G/2,G+0.05,T.leaf,0.75+((rr*11+k)%1)*0.5);
+    }
+    for(let k=0;k<3;k++){
+      const a=rr*9+k*2.1;
+      emitCubeMV(arr,cx+Math.cos(a)*0.24-0.08,py+0.24,cz+Math.sin(a)*0.24-0.08,0.16,T.cRed,1);
+    }
+    return;
+  }
+  if(b===B.shroom){
+    emitCubeMV(arr,cx-0.09,py,cz-0.09,0.18,T.cWhite,0.95);
+    emitCubeMV(arr,cx-0.09,py+0.18,cz-0.09,0.18,T.cWhite,1);
+    for(let dx=-1;dx<=1;dx++)for(let dz=-1;dz<=1;dz++)
+      if(Math.abs(dx)+Math.abs(dz)<2)emitCubeMV(arr,cx-0.11+dx*0.2,py+0.34,cz-0.11+dz*0.2,0.21,T.cRed,0.85+hash2(x+dx,z+dz)*0.3);
+    return;
+  }
+  if(b===B.stick){
+    const a=rr*6.28,dx=Math.cos(a)*0.16,dz=Math.sin(a)*0.16;
+    for(let k=-1;k<=1;k++)emitCubeMV(arr,cx+dx*k-0.07,py+0.02,cz+dz*k-0.07,0.15,T.cBark,0.8+((rr*7+k)%1)*0.3);
+    return;
+  }
+  if(b===B.pebble){
+    emitCubeMV(arr,cx-0.1,py,cz-0.1,0.2,T.cGray,0.9);
+    if(rr>0.5)emitCubeMV(arr,cx+0.12,py,cz-0.02,0.13,T.cGray,0.75);
+    return;
+  }
+  if(b===B.shell){
+    emitCubeMV(arr,cx-0.09,py,cz-0.09,0.17,T.cShell,1);
+    emitCubeMV(arr,cx+0.05,py,cz+0.02,0.1,T.cWhite,0.95);
+    return;
+  }
+  const n=3+Math.floor(rr*4);
+  for(let k=0;k<n;k++){
+    const a=rr*6.28+k*2.4,d=0.12+((rr*7+k*0.31)%1)*0.3;
+    const bx=cx+Math.cos(a)*d,bz=cz+Math.sin(a)*d;
+    const hh=0.25+((rr*13+k*0.7)%1)*0.5;
+    for(let y2=0;y2<hh;y2+=G)
+      emitCubeMV(arr,bx-G/2,py+y2,bz-G/2,G,T.cStem,0.75+((rr*17+k+y2*3)%1)*0.5);
+    if(k===0&&(b===B.flowP||b===B.flowY)){
+      const pt=b===B.flowP?T.cPink:T.cYellow,hy=py+hh;
+      emitCubeMV(arr,bx-G/2,hy,bz-G/2,G,T.cYellow,1.05);
+      for(const o of [[G,0],[-G,0],[0,G],[0,-G]])
+        emitCubeMV(arr,bx-G/2+o[0],hy-G*0.3,bz-G/2+o[1],G,pt,0.85+((rr*23+o[0])%1)*0.4);
+    }
+  }
+}
 function emitTree(arr,tr){
   const cx=tr.x+0.5,cz=tr.z+0.5;
   const sg=smoothGroundY(cx,cz);
   const base=sg>0?sg:tr.g;
   const rj=hash2(tr.x*5+1,tr.z*9+4);
   const r=0.75+rj*0.5,ht=tr.ht+0.4;
-  eFrust(arr,cx,base-0.2,cz,0.3,0.17,ht+0.6,T.cBark,rj*6.28,5);
-  const leafT=hash2(tr.x*3,tr.z*7)>0.5?T.leaf:T.cLeaf2;
-  eBall(arr,cx,base+ht+0.9,cz,1.9*r+0.5,1.5*r+0.4,leafT,rj*6.28,7);
-  eBall(arr,cx+Math.cos(rj*9)*0.9,base+ht+1.8,cz+Math.sin(rj*9)*0.9,1.1*r+0.3,0.9*r,leafT,rj*4,6);
+  /* bent trunk in two segments + root flare */
+  const bendA=rj*6.2832,bx=Math.cos(bendA)*0.22,bz=Math.sin(bendA)*0.22;
+  eFrust(arr,cx,base-0.15,cz,0.46,0.3,0.5,T.cBark,rj*6.28,7);
+  eFrust(arr,cx,base+0.3,cz,0.3,0.22,ht*0.55,T.cBark,rj*6.28,7);
+  eFrust(arr,cx+bx,base+0.3+ht*0.5,cz+bz,0.22,0.13,ht*0.55+0.5,T.cBark,rj*4.1,7);
+  /* one main crown + 3 side lobes, two leaf tints */
+  const tA=hash2(tr.x*3,tr.z*7)>0.5?T.leaf:T.cLeaf2;
+  const tB=tA===T.leaf?T.cLeaf2:T.leaf;
+  const cy=base+ht+1.0,ccx=cx+bx*1.4,ccz=cz+bz*1.4;
+  eBall2(arr,ccx,cy+0.55,ccz,1.8*r+0.5,1.5*r+0.45,tA,rj*6.28,9);
+  for(let k=0;k<3;k++){
+    const a2=rj*9+k*2.09,lr=(0.85+hash2(tr.x+k,tr.z*3+k)*0.5)*r;
+    eBall2(arr,ccx+Math.cos(a2)*(1.35*r+0.2),cy+0.1+hash2(tr.x*2+k,tr.z+k)*0.8,
+      ccz+Math.sin(a2)*(1.35*r+0.2),lr+0.25,lr*0.8+0.2,k===1?tB:tA,rj*3+k,8);
+  }
 }
 function triLight(a,b2,c,jit){
   const ux=b2[0]-a[0],uy=b2[1]-a[1],uz=b2[2]-a[2];
@@ -1251,17 +1737,48 @@ function buildChunk(ci,cj){
     let hn=-1,cc=0;
     if(GFXPOLY){
       const tr=TREEMAP.get(x*1024+z);
-      if(tr)emitTree(arr,tr);
+      if(tr)(GFXMV?emitMicroTree:emitTree)(arr,tr);
       hn=nt(x,z);
       if(hn>0){
         const c00=cornerHG(x,z),c10=cornerHG(x+1,z),
               c01=cornerHG(x,z+1),c11=cornerHG(x+1,z+1);
         cc=(c00+c10+c01+c11)/4;
-        const t=tileFor(world[base+hn-1],0);
-        const jit=(hash2(x*3+7,z*5+1)-0.5)*0.08;
-        const A=[x,c00,z],Bv=[x+1,c10,z],Cv=[x+1,c11,z+1],Dv=[x,c01,z+1];
-        pushTri(arr,A,Bv,Cv,t,triLight(A,Bv,Cv,jit));
-        pushTri(arr,A,Cv,Dv,t,triLight(A,Cv,Dv,-jit));
+        const topB=world[base+hn-1];
+        const t=tileFor(topB,0);
+        /* 3x3 subcells, 18 tris — rolling relief + mottled light */
+        for(let sz2=0;sz2<3;sz2++)for(let sx2=0;sx2<3;sx2++){
+          const gx=x*3+sx2,gz=z*3+sz2;
+          const h00=subH(gx,gz),h10=subH(gx+1,gz),h01=subH(gx,gz+1),h11=subH(gx+1,gz+1);
+          const X0=x+sx2/3,Z0=z+sz2/3,ST=1/3;
+          const A=[X0,h00,Z0],Bv=[X0+ST,h10,Z0],Cv=[X0+ST,h11,Z0+ST],Dv=[X0,h01,Z0+ST];
+          const jit=(hash2(gx*3+7,gz*5+1)-0.5)*0.09;
+          const u0=sx2/3,v0=sz2/3,u1=u0+ST,v1=v0+ST;
+          pushTri(arr,A,Bv,Cv,t,triLight(A,Bv,Cv,jit),0,0,0,[u0,v0,u1,v0,u1,v1]);
+          pushTri(arr,A,Cv,Dv,t,triLight(A,Cv,Dv,-jit*0.6),0,0,0,[u0,v0,u1,v1,u0,v1]);
+        }
+        /* micro-voxel ground scatter */
+        if(GFXMV&&(topB===B.grass||topB===B.sand)){
+          const r=hash2(x*29+15,z*31+9);
+          if(r>0.72){
+            const sx3=x+0.1+((r*9.3)%1)*0.8,sz3=z+0.1+((r*5.7)%1)*0.8;
+            const sy=smoothGroundYCos(sx3,sz3)-0.04;
+            const st=r>0.94?T.cGray:(topB===B.sand?(r>0.85?T.cShell:T.cBark):(r>0.82?T.cBark:T.cLeaf2));
+            emitCubeMV(arr,sx3,sy,sz3,0.09+r*0.09,st,0.78+((r*13)%1)*0.35);
+          }
+        }
+        /* grass tufts sway on grassy ground */
+        if(topB===B.grass){
+          for(let k=0;k<2;k++){
+            const r=hash2(x*13+k*7+2,z*19+k*3+5);
+            if(r<0.25)continue;
+            const tx2=x+0.12+r*0.74,tz2=z+0.12+((r*7.7)%1)*0.74;
+            const fx2=tx2-x,fz2=tz2-z;
+            const ty=(c00*(1-fx2)*(1-fz2)+c10*fx2*(1-fz2)+c01*(1-fx2)*fz2+c11*fx2*fz2)-0.02;
+            const th=0.2+r*0.26;
+            pushTri(arr,[tx2-0.055,ty,tz2],[tx2+0.055,ty,tz2],[tx2,ty+th,tz2],
+              k?T.cStem:T.cLeaf2,0.86+r*0.2,0,0,1);
+          }
+        }
         /* water + foam follow the smooth shoreline, not the block grid */
         const cMin=Math.min(c00,c10,c01,c11),cMax=Math.max(c00,c10,c01,c11);
         const WSURF=WL+0.88;
@@ -1297,7 +1814,10 @@ function buildChunk(ci,cj){
       if(CROSS.has(b)){
         /* plants ride the smoothed ground so they don't float or sink */
         const py=(GFXPOLY&&hn>0&&y===hn)?cc:y;
-        if(GFXPOLY&&PLANT3D.has(b)){emitPlant(arr,b,x,py,z,hash2(x*11+3,z*17+9));continue;}
+        if(GFXPOLY&&PLANT3D.has(b)){
+          if(GFXMV)emitMicroPlant(arr,b,x,py,z,hash2(x*11+3,z*17+9));
+          else emitPlant(arr,b,x,py,z,hash2(x*11+3,z*17+9));
+          continue;}
         pushCross(arr,x,py,z,tileFor(b,1),SWAY.has(b));continue;}
       for(const F of FACES){
         if(GFXPOLY&&hn>0){
@@ -1321,7 +1841,8 @@ function buildChunk(ci,cj){
     gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(war),gl.STATIC_DRAW);}
   chunks[cj*CSX+ci]=ch;
 }
-function buildAllChunks(){for(let cj=0;cj<CSZ;cj++)for(let ci=0;ci<CSX;ci++)buildChunk(ci,cj);}
+function buildAllChunks(){
+  clearHGMemo();for(let cj=0;cj<CSZ;cj++)for(let ci=0;ci<CSX;ci++)buildChunk(ci,cj);}
 function remeshDirty(maxN){let n=0;
   for(const k of dirtySet){dirtySet.delete(k);buildChunk(k%CSX,(k/CSX)|0);if(++n>=maxN)break;}}
 
@@ -1342,9 +1863,9 @@ function buildRoofMesh(){
       eTri(arr,c[0],r0,c[3],t,-0.03);
       eTri(arr,c[1],c[2],r1,t,-0.03);
     }else if(R.t==='dome'){
-      eFrust(arr,R.cx,R.yB,R.cz,R.r,R.r*0.72,1.8,t,0.3,8);
-      eFrust(arr,R.cx,R.yB+1.8,R.cz,R.r*0.72,R.r*0.34,1.7,t,0.3,8);
-      eCone(arr,R.cx,R.yB+3.5,R.cz,R.r*0.34,1.4,t,0.3,8);
+      eFrust(arr,R.cx,R.yB,R.cz,R.r,R.r*0.72,1.8,t,0.3,14);
+      eFrust(arr,R.cx,R.yB+1.8,R.cz,R.r*0.72,R.r*0.34,1.7,t,0.3,14);
+      eCone(arr,R.cx,R.yB+3.5,R.cz,R.r*0.34,1.4,t,0.3,14);
     }
   }
   if(ROOFM.vb)gl.deleteBuffer(ROOFM.vb);
@@ -1372,7 +1893,7 @@ const cubeVB=gl.createBuffer();
 const roundVB=gl.createBuffer();
 let ROUND_N=0;
 (function(){
-  const r=0.24,g2=5,a=[];
+  const r=0.3,g2=9,a=[];
   const AX=[[0,1,2,1],[0,1,2,-1],[1,0,2,1],[1,0,2,-1],[2,0,1,1],[2,0,1,-1]];
   const P=(ax,u,v)=>{const p=[0,0,0];p[ax[0]]=ax[3]*0.5;p[ax[1]]=u;p[ax[2]]=v;return p;};
   function vert(p){
@@ -1399,21 +1920,47 @@ let ROUND_N=0;
   gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(a),gl.STATIC_DRAW);
 })();
 let ENT_VBUF=null,ENT_N=36;
-function beginEnts(pv,cam){gl.useProgram(PE.p);
+function beginEnts(pv,cam){
+  ENT_VBUF=GFXPOLY?roundVB:cubeVB;ENT_N=GFXPOLY?ROUND_N:36;
+  if(ENTDEPTH){
+    gl.useProgram(PDE.p);
+    gl.uniformMatrix4fv(PDE.uPV,false,pv);
+    gl.bindBuffer(gl.ARRAY_BUFFER,ENT_VBUF);
+    gl.enableVertexAttribArray(PDE.aP);gl.vertexAttribPointer(PDE.aP,3,gl.FLOAT,false,16,0);
+    return;
+  }
+  gl.useProgram(PE.p);
   gl.uniformMatrix4fv(PE.uPV,false,pv);
   gl.uniform3f(PE.uCam,cam[0],cam[1],cam[2]);
   gl.uniform3f(PE.uFog,FOG[0],FOG[1],FOG[2]);
   gl.uniform2f(PE.uFogD,FOGD[0],FOGD[1]);
   gl.uniform1f(PE.uEAlpha,1);
   gl.uniform1f(PE.uAmb,AMB);
-  ENT_VBUF=GFXPOLY?roundVB:cubeVB;ENT_N=GFXPOLY?ROUND_N:36;
+  const REAL=realActive();
+  gl.uniform1f(PE.uReal,REAL?1:0);
+  gl.uniform1f(PE.uEmis,0);
+  if(REAL){
+    gl.uniform1i(PE.uShadow,1);
+    gl.uniformMatrix4fv(PE.uShadowM,false,SHADOWM);
+    gl.uniform3f(PE.uSunD,SUN.d[0],SUN.d[1],SUN.d[2]);
+    gl.uniform3f(PE.uSunC,SUN.c[0],SUN.c[1],SUN.c[2]);
+    gl.uniform3f(PE.uAmbC,SUN.a[0],SUN.a[1],SUN.a[2]);
+  }
   gl.bindBuffer(gl.ARRAY_BUFFER,ENT_VBUF);
   gl.enableVertexAttribArray(PE.aP);gl.vertexAttribPointer(PE.aP,3,gl.FLOAT,false,16,0);
   gl.enableVertexAttribArray(PE.aL);gl.vertexAttribPointer(PE.aL,1,gl.FLOAT,false,16,12);}
-function drawBox(m,colHex){gl.uniformMatrix4fv(PE.uM,false,m);
+function drawBox(m,colHex){
+  if(ENTDEPTH){
+    gl.uniformMatrix4fv(PDE.uM,false,m);
+    gl.drawArrays(gl.TRIANGLES,0,ENT_N);
+    return;
+  }
+  gl.uniformMatrix4fv(PE.uM,false,m);
   const c=hexRGB(colHex);gl.uniform3f(PE.uCol,c[0],c[1],c[2]);
   gl.drawArrays(gl.TRIANGLES,0,ENT_N);}
-function drawBoxA(m,colHex,a){gl.uniform1f(PE.uEAlpha,a);drawBox(m,colHex);gl.uniform1f(PE.uEAlpha,1);}
+function drawBoxA(m,colHex,a){
+  if(ENTDEPTH)return; /* translucent things cast no shadow */
+  gl.uniform1f(PE.uEAlpha,a);drawBox(m,colHex);gl.uniform1f(PE.uEAlpha,1);}
 
 /* ---- real-time day/night: the pond lives on the host's actual clock ---- */
 const DAYK=[ /* hour, sky color, ambient light */
@@ -1471,13 +2018,15 @@ const cloudVB=gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER,cloudVB);
   gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(a),gl.STATIC_DRAW);})();
 function drawSky(cam){
+  if(ENTDEPTH)return;
   const t=performance.now()/1000;
   gl.uniform2f(PE.uFogD,800,900); /* sky ignores world fog */
   gl.uniform1f(PE.uAmb,1);        /* sky objects glow on their own */
+  gl.uniform1f(PE.uEmis,1);
   gl.depthMask(false);
   gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
-  if(DAYA>0.02){ /* sun */
-    const sx=cam[0]+82,sy=cam[1]+62,sz=cam[2]-64;
+  if(DAYA>0.02){ /* sun rides its real direction */
+    const sx=cam[0]+SUN.d[0]*120,sy=cam[1]+Math.max(SUN.d[1],0.12)*120,sz=cam[2]+SUN.d[2]*120;
     drawBoxA(mMul(mT(sx,sy,sz),mS(22,22,2.0)),'#fff8d0',0.25*DAYA);
     drawBoxA(mMul(mT(sx,sy,sz),mS(13,13,2.4)),'#fff3ae',DAYA);
   }
@@ -1507,6 +2056,7 @@ function drawSky(cam){
   gl.vertexAttribPointer(PE.aL,1,gl.FLOAT,false,16,12);
   gl.uniform2f(PE.uFogD,FOGD[0],FOGD[1]);
   gl.uniform1f(PE.uAmb,AMB);
+  gl.uniform1f(PE.uEmis,0);
 }
 /* ---- particles: splashes, sparkles, dust, pollen ---- */
 const PARTS=[];
@@ -1532,20 +2082,57 @@ function drawParts(){
 }
 /* soft blob shadow that grounds critters */
 function drawShadow(e){
+  if(realActive())return; /* real shadow-mapped shadows instead */
   const gy=walkGroundY(e.x,e.z),h=e.y-gy;
   if(h<-1||h>6)return;
   const s=0.62*clamp(1-h*0.2,0.35,1);
   drawBoxA(mMul(mT(e.x,gy+0.045,e.z),mS(s,0.02,s)),'#06140a',0.32*clamp(1-h*0.12,0.35,1));
 }
 
+function bindTerrDepth(vb){gl.bindBuffer(gl.ARRAY_BUFFER,vb);
+  gl.enableVertexAttribArray(PD.aP);gl.vertexAttribPointer(PD.aP,3,gl.FLOAT,false,28,0);
+  gl.enableVertexAttribArray(PD.aT);gl.vertexAttribPointer(PD.aT,2,gl.FLOAT,false,28,12);
+  gl.enableVertexAttribArray(PD.aS);gl.vertexAttribPointer(PD.aS,1,gl.FLOAT,false,28,24);}
+let ENTDEPTH=false;
+function renderShadowPass(cam,drawEnts){
+  const ex2=66;
+  const cx=cam[0],cy=clamp(cam[1],10,40),cz=cam[2];
+  const view=mLook(cx+SUN.d[0]*110,cy+SUN.d[1]*110,cz+SUN.d[2]*110,cx,cy,cz);
+  SHADOWM_RAW=mMul(mOrtho(-ex2,ex2,-ex2,ex2,20,240),view);
+  SHADOWM=mMul(BIASM,SHADOWM_RAW);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,shadowFB);
+  gl.viewport(0,0,SHADOW_SZ,SHADOW_SZ);
+  gl.clear(gl.DEPTH_BUFFER_BIT|gl.COLOR_BUFFER_BIT);
+  gl.enable(gl.POLYGON_OFFSET_FILL);gl.polygonOffset(3,10);
+  gl.useProgram(PD.p);
+  gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,hiTex);gl.uniform1i(PD.uTex,0);
+  gl.uniformMatrix4fv(PD.uMVP,false,SHADOWM_RAW);
+  gl.uniform1f(PD.uTime,performance.now()/1000);
+  for(const ch of chunks){if(!ch||!ch.vb)continue;
+    if(Math.hypot(ch.cx-cx,ch.cz-cz)>ex2+30)continue;
+    bindTerrDepth(ch.vb);gl.drawArrays(gl.TRIANGLES,0,ch.n);
+  }
+  if(ROOFM.n){bindTerrDepth(ROOFM.vb);gl.drawArrays(gl.TRIANGLES,0,ROOFM.n);}
+  ENTDEPTH=true;
+  beginEnts(SHADOWM_RAW,cam);
+  drawEnts();
+  ENTDEPTH=false;
+  gl.disable(gl.POLYGON_OFFSET_FILL);
+  gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+  gl.viewport(0,0,gl.drawingBufferWidth,gl.drawingBufferHeight);
+}
 function renderWorld(pv,cam,fwd,drawEnts){
   skyTick();
+  calcSun();
+  const REAL=realActive();
+  if(REAL)renderShadowPass(cam,drawEnts);
   gl.clearColor(FOG[0],FOG[1],FOG[2],1);
   gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+  if(REAL){gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,shadowTex);gl.activeTexture(gl.TEXTURE0);}
   beginEnts(pv,cam);
   drawSky(cam);
   gl.useProgram(PT.p);
-  gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,GFXPOLY?palTex:tex);gl.uniform1i(PT.uTex,0);
+  gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,GFXPOLY?(REAL?hiTex:palTex):tex);gl.uniform1i(PT.uTex,0);
   gl.uniformMatrix4fv(PT.uMVP,false,pv);
   gl.uniform3f(PT.uCam,cam[0],cam[1],cam[2]);
   gl.uniform3f(PT.uFog,FOG[0],FOG[1],FOG[2]);
@@ -1554,6 +2141,15 @@ function renderWorld(pv,cam,fwd,drawEnts){
   gl.uniform1f(PT.uTime,performance.now()/1000);
   gl.uniform1f(PT.uWave,0);
   gl.uniform1f(PT.uAmb,AMB);
+  gl.uniform1f(PT.uReal,REAL?1:0);
+  if(REAL){
+    gl.uniform1i(PT.uShadow,1);
+    gl.uniformMatrix4fv(PT.uShadowM,false,SHADOWM);
+    gl.uniform3f(PT.uSunD,SUN.d[0],SUN.d[1],SUN.d[2]);
+    gl.uniform3f(PT.uSunC,SUN.c[0],SUN.c[1],SUN.c[2]);
+    gl.uniform3f(PT.uAmbC,SUN.a[0],SUN.a[1],SUN.a[2]);
+    gl.uniform3f(PT.uSkyC,SUN.sky[0],SUN.sky[1],SUN.sky[2]);
+  }
   const vis=[];
   for(const ch of chunks){if(!ch)continue;
     const dx=ch.cx-cam[0],dz=ch.cz-cam[2];
@@ -1646,7 +2242,51 @@ function moveEntity(e,dt){
   if(e.y<-6){e.y=groundY(e.x,e.z)+1;e.vy=0;}
 }
 
+let RIDE=null;
+function slideSample(sl,d){
+  let acc=0;
+  for(let i=0;i<sl.pts.length-1;i++){
+    const a=sl.pts[i],b2=sl.pts[i+1];
+    const L=Math.hypot(b2[0]-a[0],b2[1]-a[1],b2[2]-a[2])||0.001;
+    if(acc+L>=d){
+      const f=(d-acc)/L;
+      return {p:[a[0]+(b2[0]-a[0])*f+0.5,a[1]+(b2[1]-a[1])*f,a[2]+(b2[2]-a[2])*f+0.5],
+              dir:[(b2[0]-a[0])/L,(b2[1]-a[1])/L,(b2[2]-a[2])/L],end:false};
+    }
+    acc+=L;
+  }
+  const e=sl.pts[sl.pts.length-1];
+  return {p:[e[0]+0.5,e[1],e[2]+0.5],dir:[0,0,1],end:true};
+}
+function rideTick(dt){
+  if(!RIDE){
+    for(const sl of SLIDES){
+      const st=sl.pts[0];
+      if(!P.inWater&&Math.hypot(P.x-st[0]-0.5,P.y-st[1],P.z-st[2]-0.5)<1.5){
+        RIDE={sl,d:0.2,sp:4};
+        sHop();toast('Wheee!');
+        break;
+      }
+    }
+    return;
+  }
+  RIDE.sp=clamp(RIDE.sp+(-slideSample(RIDE.sl,RIDE.d).dir[1])*34*dt+4*dt,5,16);
+  RIDE.d+=RIDE.sp*dt;
+  const s2=slideSample(RIDE.sl,RIDE.d);
+  P.x=s2.p[0];P.y=s2.p[1]+0.55;P.z=s2.p[2];
+  P.vx=0;P.vy=0;P.vz=0;
+  P.yaw=Math.atan2(-s2.dir[0],-s2.dir[2]);
+  if(Math.random()<dt*14)burst(P.x,P.y-0.2,P.z,3,'#cfeeff',1.2,1,5,0.06);
+  if(s2.end){
+    RIDE=null;
+    P.vy=2;P.vx=s2.dir[0]*4;P.vz=s2.dir[2]*4;
+    burst(P.x,P.y,P.z,14,'#cfeeff',2.4,2.2,7,0.1);
+    sSplash&&sSplash();
+  }
+}
 function updatePlayer(dt){
+  rideTick(dt);
+  if(RIDE)return;
   const im=inputMove();
   const sp=P.inWater?2.7:4.3;
   const fx=-Math.sin(cam.yaw),fz=-Math.cos(cam.yaw);
@@ -1731,6 +2371,12 @@ function drawCritter(e,t){
   if(sp.teeth)part(mT(0,1.1,0.23),0.12,0.1,0.03,'#ffffff');
   if(sp.shell)part(mT(0,0.76,-0.25),0.5,0.46,0.14,'#8a6a3a');
   if(sp.tail)part(mMul(mT(0,0.5,-0.3),mRX(0.6)),0.18,0.1,0.42,sp.dark);
+  if(e===P&&RIDE){
+    for(let k=0;k<8;k++){
+      const a=k/8*6.2832;
+      part(mT(Math.cos(a)*0.55,0.12,Math.sin(a)*0.55),0.3,0.18,0.3,k%2?'#e04848':'#f2efe4');
+    }
+  }
   if(e===P&&anyDeliveryActive()){
     part(mT(0,0.96,-0.3),0.36,0.32,0.2,'#c9974d');
     part(mT(0,0.96,-0.3),0.38,0.08,0.22,'#a8552f');
@@ -2333,7 +2979,8 @@ function confirmMini(id){
     [['▶ Play!','',()=>{closeModal();startMini(id);}],
      ['Not now','gray',()=>{closeModal();padCool=4;}]]);
 }
-function teleport(p){P.x=p[0];P.y=p[1];P.z=p[2];P.vx=P.vy=P.vz=0;}
+function teleport(p){
+  RIDE=null;P.x=p[0];P.y=p[1];P.z=p[2];P.vx=P.vy=P.vz=0;}
 function spawnFlies(){
   FLIES.length=0;
   for(let i=0;i<MINI.firefly.goal;i++)
@@ -2446,6 +3093,7 @@ function modelIcon(md){
   return '<img src="'+MICONS[md.id]+'">';
 }
 function markRegion(x0,z0,x1,z1){
+  clearHGMemo();
   for(let x=x0;x<=x1+8;x+=8)for(let z=z0;z<=z1+8;z+=8)
     markDirtyAt(clamp(x,0,W-1),clamp(z,0,D-1));
 }
@@ -3634,13 +4282,61 @@ const OBBY={x:84,z:68,g:0,cps:[],flag:null}; /* clear meadow between city and Ma
 const OBBY_PLATS=[
  [0,0,0,3],[4,0,2,1],[7,3,4,1],[7,7,6,1],[4,9,8,1],
  [0,7,10,1,'cp'],[-4,9,12,1],[-7,6,14,1],[-7,2,16,1],
- [-4,-1,18,1,'cp'],[0,-4,20,1],[4,-4,22,1],[7,-1,24,2]];
+ [-4,-1,18,1,'cp'],[0,-4,20,1],[4,-4,22,1],[7,-1,24,1],
+ [7,3,26,1],[4,6,28,1,'cp'],[0,8,30,1],[-4,6,32,1],
+ [-7,3,34,1],[-7,-1,36,1,'cp'],[-4,-4,38,1],[0,-6,40,1],
+ [4,-4,42,1],[7,0,44,2]];
+const SLIDES=[];
+function slidePath(pts){
+  /* stamp a blue channel with rails along a polyline; register for riding */
+  const P2=[];
+  for(let i=0;i<pts.length-1;i++){
+    const a=pts[i],b2=pts[i+1];
+    const L=Math.hypot(b2[0]-a[0],b2[1]-a[1],b2[2]-a[2]);
+    for(let d=0;d<L;d+=0.5){
+      const f=d/L;
+      P2.push([a[0]+(b2[0]-a[0])*f,a[1]+(b2[1]-a[1])*f,a[2]+(b2[2]-a[2])*f]);
+    }
+  }
+  P2.push(pts[pts.length-1]);
+  for(const p of P2){
+    const x=Math.round(p[0]),y=Math.round(p[1]),z=Math.round(p[2]);
+    sb(x,y,z,B.padB);sb(x+1,y,z,B.padB);
+    sb(x-1,y+1,z,B.padR);sb(x+2,y+1,z,B.padR);
+    for(let cy=y+2;cy<y+5;cy++){sb(x,cy,z,B.air);sb(x+1,cy,z,B.air);}
+  }
+  SLIDES.push({pts:P2});
+}
+function buildWaterPark(){
+  const cx=SPLASH.x,cz=SPLASH.z,g=SPLASH.h;
+  clearAbove(cx-24,cz-24,cx+24,cz+24,g);
+  floorPad(cx-22,cz-22,cx+22,cz+22,g,B.sand);
+  /* splash pool */
+  for(let z=cz-9;z<=cz+15;z++)for(let x=cx-16;x<=cx+12;x++){
+    if(Math.hypot(x-(cx-2),z-(cz+3))>14)continue;
+    sb(x,g,z,B.water);sb(x,g-1,z,B.water);sb(x,g-2,z,B.sand);
+  }
+  /* tower + stairs */
+  const tx=cx+14,tz=cz-14;
+  fillB(tx-2,g,tz-2,tx+2,g+13,tz+2,B.plank);
+  fillB(tx-3,g+14,tz-3,tx+3,g+14,tz+3,B.plank);
+  fillB(tx-3,g+15,tz-3,tx+3,g+15,tz+3,B.air);
+  for(let i=0;i<14;i++)fillB(tx+3+Math.floor(i/2),g+13-i,tz-1,tx+4+Math.floor(i/2),g+13-i,tz+1,B.path);
+  sb(tx-3,g+15,tz-3,B.lantern);sb(tx+3,g+15,tz+3,B.lantern);
+  sb(tx,g+16,tz,B.flag);
+  /* three slides: Riptide (steep), Zigzag, Lazy Loop */
+  slidePath([[tx-3,g+14,tz],[tx-8,g+9,tz+2],[tx-13,g+4,tz+5],[tx-15,g+1,tz+9]]);
+  slidePath([[tx,g+14,tz+3],[tx+2,g+11,tz+8],[tx-4,g+8,tz+12],[tx+1,g+5,tz+17],[tx-5,g+1,tz+20],[tx-8,g+1,tz+19]]);
+  slidePath([[tx-3,g+14,tz-2],[tx-10,g+11,tz-6],[tx-18,g+8,tz-2],[tx-20,g+5,tz+6],[tx-16,g+2,tz+12],[tx-12,g+1,tz+13]]);
+  /* deck lanterns + benches */
+  for(const o of [[-20,-20],[12,-20],[-20,18],[12,18]])sb(cx+o[0],g,cz+o[1],B.lantern);
+}
 function buildObby(){
   const g=Math.max(walkGroundY(OBBY.x,OBBY.z),WL+2);
   OBBY.g=g;
   clearAbove(OBBY.x-12,OBBY.z-10,OBBY.x+12,OBBY.z+15,g);
   floorPad(OBBY.x-4,OBBY.z-4,OBBY.x+4,OBBY.z+4,g,B.path);
-  for(let y=g;y<g+24;y++)sb(OBBY.x,y,OBBY.z,B.wood); /* center mast */
+  for(let y=g;y<g+44;y++)sb(OBBY.x,y,OBBY.z,B.wood); /* center mast */
   OBBY.cps=[[OBBY.x+0.5,g,OBBY.z+0.5]];
   for(const p of OBBY_PLATS){
     const px2=OBBY.x+p[0],pz=OBBY.z+p[1],py=g+p[2],r=p[3];
@@ -3661,7 +4357,12 @@ function buildObby(){
     {x:OBBY.x-2,y:g+11,z:OBBY.z+8,ax:2.4,ay:0,az:0,per:4,ph:0.6,sx:2,sz:2,col:'#8a52e6'},
     {x:OBBY.x-5.5,y:g+15,z:OBBY.z+0,ax:0,ay:0,az:2.4,per:4.4,ph:0.1,sx:2,sz:2,col:'#43cea2'},
     {x:OBBY.x-2,y:g+19,z:OBBY.z-2.5,ax:0,ay:1.6,az:0,per:3.4,ph:0.5,sx:2,sz:2,col:'#ffb02e'},
-    {x:OBBY.x+2,y:g+21,z:OBBY.z-4,ax:2,ay:0,az:0,per:3.8,ph:0.8,sx:2,sz:2,col:'#8a52e6'});
+    {x:OBBY.x+2,y:g+21,z:OBBY.z-4,ax:2,ay:0,az:0,per:3.8,ph:0.8,sx:2,sz:2,col:'#8a52e6'},
+    {x:OBBY.x+5.5,y:g+27,z:OBBY.z+4.5,ax:0,ay:0,az:2.2,per:3.9,ph:0.2,sx:2,sz:2,col:'#43cea2'},
+    {x:OBBY.x-2,y:g+31,z:OBBY.z+7,ax:2.4,ay:0,az:0,per:4.1,ph:0.55,sx:2,sz:2,col:'#8a52e6'},
+    {x:OBBY.x-5.5,y:g+35,z:OBBY.z+1,ax:0,ay:1.7,az:0,per:3.5,ph:0.3,sx:2,sz:2,col:'#ffb02e'},
+    {x:OBBY.x-2,y:g+39,z:OBBY.z-5,ax:2.2,ay:0,az:0,per:3.7,ph:0.7,sx:2,sz:2,col:'#43cea2'},
+    {x:OBBY.x+2,y:g+43,z:OBBY.z-2,ax:0,ay:1.5,az:0,per:3.3,ph:0.9,sx:2,sz:2,col:'#8a52e6'});
 }
 
 /* ---- pet ---- */
