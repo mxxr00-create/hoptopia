@@ -294,7 +294,7 @@ const clamp=(v,a,b)=>v<a?a:v>b?b:v;
 const lerp=(a,b,t)=>a+(b-a)*t;
 const dist2=(ax,az,bx,bz)=>Math.hypot(ax-bx,az-bz);
 
-const HOP_BUILD='7.1';
+const HOP_BUILD='7.11';
 let GFXPOLY=false; /* 'Smooth' graphics prototype (low-poly terrain + flat colors) */
 const SAVE_KEY='hoptopia1';
 const DEF_SAVE={started:false,critter:'frog',mode:'',coins:0,inv:{},quests:{},best:{},plot:[],pos:null,sound:true,music:true,tut:false,outfit:{hat:'none',neck:'none'},wardrobe:{}};
@@ -590,7 +590,12 @@ function genDecor(){
 
 /* ---- structure helpers ---- */
 function fillB(x0,y0,z0,x1,y1,z1,b){for(let x=x0;x<=x1;x++)for(let y=y0;y<=y1;y++)for(let z=z0;z<=z1;z++)sb(x,y,z,b);}
-function clearAbove(x0,z0,x1,z1,g){for(let x=x0;x<=x1;x++)for(let z=z0;z<=z1;z++)for(let y=g;y<H;y++)sb(x,y,z,B.air);}
+function clearAbove(x0,z0,x1,z1,g){
+  for(let x=x0;x<=x1;x++)for(let z=z0;z<=z1;z++){
+    for(let y=g;y<H;y++)sb(x,y,z,B.air);
+    if(x>=0&&z>=0&&x<W&&z<D)TERR_H[z*W+x]=Math.min(TERR_H[z*W+x],g); /* sheet follows the flattened ground */
+  }
+}
 function floorPad(x0,z0,x1,z1,g,b){for(let x=x0;x<=x1;x++)for(let z=z0;z<=z1;z++)sb(x,g-1,z,b);}
 function lamp(x,z,g){sb(x,g,z,B.wood);sb(x,g+1,z,B.wood);sb(x,g+2,z,B.lantern);}
 function hut(cx,cz,g,wall,roof){
@@ -956,7 +961,7 @@ let GFXREAL=!!EXT_DEPTH;
 let REALPREF=!/[?&]flat\b/.test(location.search);
 const GFXMV=!/[?&]nomv\b/.test(location.search); /* micro-voxel look (Path 2) — default on */
 function realActive(){return GFXPOLY&&GFXREAL&&REALPREF;}
-function resize(){const dpr=Math.min(window.devicePixelRatio||1,2);
+function resize(){const dpr=Math.min(window.devicePixelRatio||1,1.5);
   canvas.width=Math.max(2,Math.floor(innerWidth*dpr));canvas.height=Math.max(2,Math.floor(innerHeight*dpr));
   gl.viewport(0,0,canvas.width,canvas.height);}
 addEventListener('resize',resize);resize();
@@ -1359,7 +1364,7 @@ function calcSun(){
 }
 gl.enable(gl.DEPTH_TEST);
 gl.clearColor(0.62,0.824,0.949,1);
-const FOG=[0.62,0.824,0.949],FOGD=[80,126],VIEW_DIST=136;
+const FOG=[0.62,0.824,0.949],FOGD=[74,116],VIEW_DIST=122;
 let AMB=1,DAYA=1,NIGHTA=0; /* day/night state, updated every frame from the real clock */
 
 /* matrices (column-major) */
@@ -1893,7 +1898,7 @@ const cubeVB=gl.createBuffer();
 const roundVB=gl.createBuffer();
 let ROUND_N=0;
 (function(){
-  const r=0.3,g2=9,a=[];
+  const r=0.28,g2=6,a=[];
   const AX=[[0,1,2,1],[0,1,2,-1],[1,0,2,1],[1,0,2,-1],[2,0,1,1],[2,0,1,-1]];
   const P=(ax,u,v)=>{const p=[0,0,0];p[ax[0]]=ax[3]*0.5;p[ax[1]]=u;p[ax[2]]=v;return p;};
   function vert(p){
@@ -2093,7 +2098,7 @@ function bindTerrDepth(vb){gl.bindBuffer(gl.ARRAY_BUFFER,vb);
   gl.enableVertexAttribArray(PD.aP);gl.vertexAttribPointer(PD.aP,3,gl.FLOAT,false,28,0);
   gl.enableVertexAttribArray(PD.aT);gl.vertexAttribPointer(PD.aT,2,gl.FLOAT,false,28,12);
   gl.enableVertexAttribArray(PD.aS);gl.vertexAttribPointer(PD.aS,1,gl.FLOAT,false,28,24);}
-let ENTDEPTH=false;
+let ENTDEPTH=false,FRN=0,SHADOWM_INIT=false;
 function renderShadowPass(cam,drawEnts){
   const ex2=66;
   const cx=cam[0],cy=clamp(cam[1],10,40),cz=cam[2];
@@ -2125,7 +2130,8 @@ function renderWorld(pv,cam,fwd,drawEnts){
   skyTick();
   calcSun();
   const REAL=realActive();
-  if(REAL)renderShadowPass(cam,drawEnts);
+  FRN++;
+  if(REAL&&(FRN%2===0||!SHADOWM_INIT)){renderShadowPass(cam,drawEnts);SHADOWM_INIT=true;}
   gl.clearColor(FOG[0],FOG[1],FOG[2],1);
   gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
   if(REAL){gl.activeTexture(gl.TEXTURE1);gl.bindTexture(gl.TEXTURE_2D,shadowTex);gl.activeTexture(gl.TEXTURE0);}
@@ -2160,6 +2166,7 @@ function renderWorld(pv,cam,fwd,drawEnts){
     if(ch.vb){bindTerr(ch.vb);gl.drawArrays(gl.TRIANGLES,0,ch.n);}
   }
   if(GFXPOLY&&ROOFM.n){bindTerr(ROOFM.vb);gl.drawArrays(gl.TRIANGLES,0,ROOFM.n);}
+  if(SLIDEM.n){bindTerr(SLIDEM.vb);gl.drawArrays(gl.TRIANGLES,0,SLIDEM.n);}
   drawEnts();
   gl.useProgram(PT.p);
   gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);
@@ -2260,6 +2267,17 @@ function slideSample(sl,d){
 }
 function rideTick(dt){
   if(!RIDE){
+    /* water-park lift: stand on the glowing base pad, zip to the tower top */
+    if(SLIDES.length){
+      const tx=SPLASH.x+14,tz=SPLASH.z-14;
+      if(P.y<SPLASH.h+7&&Math.hypot(P.x-tx-0.5,P.z-tz-5.5)<1.4&&performance.now()>TELE_CD){
+        TELE_CD=performance.now()+1600;
+        burst(P.x,P.y+0.8,P.z,12,'#c9a8ff',2,2,5,0.1);
+        teleport([tx+0.5,SPLASH.h+15.2,tz+0.5]);
+        burst(P.x,P.y+0.8,P.z,12,'#c9a8ff',2,2,5,0.1);
+        blip(500,.06,'sine',.18);blip(900,.09,'sine',.16);
+      }
+    }
     for(const sl of SLIDES){
       const st=sl.pts[0];
       if(!P.inWater&&Math.hypot(P.x-st[0]-0.5,P.y-st[1],P.z-st[2]-0.5)<1.5){
@@ -2273,7 +2291,7 @@ function rideTick(dt){
   RIDE.sp=clamp(RIDE.sp+(-slideSample(RIDE.sl,RIDE.d).dir[1])*34*dt+4*dt,5,16);
   RIDE.d+=RIDE.sp*dt;
   const s2=slideSample(RIDE.sl,RIDE.d);
-  P.x=s2.p[0];P.y=s2.p[1]+0.55;P.z=s2.p[2];
+  P.x=s2.p[0];P.y=s2.p[1]+0.35;P.z=s2.p[2];
   P.vx=0;P.vy=0;P.vz=0;
   P.yaw=Math.atan2(-s2.dir[0],-s2.dir[2]);
   if(Math.random()<dt*14)burst(P.x,P.y-0.2,P.z,3,'#cfeeff',1.2,1,5,0.06);
@@ -3446,7 +3464,7 @@ function boot(){
     $('#loading .t').textContent='Hopping to your friend’s pond…';
     mpJoinBoot(JSON.parse(mj).code).then(()=>{
       buildAllChunks();
-      buildRoofMesh();
+      buildRoofMesh();buildSlideMesh();
       scanLanterns();
       buildMiniBase();
       syncPlotEnts();
@@ -3464,7 +3482,7 @@ function boot(){
   }
   rebuildPlot();
   buildAllChunks();
-  buildRoofMesh();
+  buildRoofMesh();buildSlideMesh();
   scanLanterns();
   buildMiniBase();
   spawnNPCs();
@@ -4253,8 +4271,10 @@ function moverCarry(e){
 let TELE_PAIRS=[],TELE_CD=0;
 function gadgetCheck(e){
   if(e!==P)return;
-  const bx=Math.floor(e.x),bz=Math.floor(e.z),by=Math.floor(e.y-0.4);
-  const b=gb(bx,by,bz);
+  const bx=Math.floor(e.x),bz=Math.floor(e.z);
+  let by=Math.floor(e.y-0.4);
+  let b=gb(bx,by,bz);
+  if(b!==B.bounce&&b!==B.tele){by--;b=gb(bx,by,bz);} /* tolerate sheet hover */
   if(e.onGround&&b===B.bounce){
     e.vy=13.5;e.onGround=false;
     blip(300,.08,'square',.2);setTimeout(()=>blip(620,.12,'square',.18),60);
@@ -4288,24 +4308,50 @@ const OBBY_PLATS=[
  [4,-4,42,1],[7,0,44,2]];
 const SLIDES=[];
 function slidePath(pts){
-  /* stamp a blue channel with rails along a polyline; register for riding */
+  /* Catmull-Rom smoothed path — the flume mesh and the ride both follow it */
   const P2=[];
   for(let i=0;i<pts.length-1;i++){
-    const a=pts[i],b2=pts[i+1];
-    const L=Math.hypot(b2[0]-a[0],b2[1]-a[1],b2[2]-a[2]);
-    for(let d=0;d<L;d+=0.5){
-      const f=d/L;
-      P2.push([a[0]+(b2[0]-a[0])*f,a[1]+(b2[1]-a[1])*f,a[2]+(b2[2]-a[2])*f]);
+    const p0=pts[Math.max(0,i-1)],p1=pts[i],p2=pts[i+1],p3=pts[Math.min(pts.length-1,i+2)];
+    const L=Math.hypot(p2[0]-p1[0],p2[1]-p1[1],p2[2]-p1[2]);
+    const n=Math.max(2,Math.ceil(L/0.45));
+    for(let j=0;j<n;j++){
+      const t=j/n,t2=t*t,t3=t2*t;
+      const c=k=>0.5*((2*p1[k])+(-p0[k]+p2[k])*t+(2*p0[k]-5*p1[k]+4*p2[k]-p3[k])*t2+(-p0[k]+3*p1[k]-3*p2[k]+p3[k])*t3);
+      P2.push([c(0),c(1),c(2)]);
     }
   }
   P2.push(pts[pts.length-1]);
-  for(const p of P2){
-    const x=Math.round(p[0]),y=Math.round(p[1]),z=Math.round(p[2]);
-    sb(x,y,z,B.padB);sb(x+1,y,z,B.padB);
-    sb(x-1,y+1,z,B.padR);sb(x+2,y+1,z,B.padR);
-    for(let cy=y+2;cy<y+5;cy++){sb(x,cy,z,B.air);sb(x+1,cy,z,B.air);}
-  }
   SLIDES.push({pts:P2});
+}
+let SLIDEM={vb:null,n:0};
+function buildSlideMesh(){
+  if(SLIDEM.vb||!SLIDES.length)return;
+  const arr=[],N=8;
+  for(const sl of SLIDES){
+    const pts=sl.pts;
+    let prev=null;
+    for(let i=0;i<pts.length;i++){
+      const p=pts[i];
+      const q=pts[Math.min(i+1,pts.length-1)],o=pts[Math.max(i-1,0)];
+      let tx2=q[0]-o[0],tz2=q[2]-o[2];
+      let rx=tz2,rz=-tx2;const rl=Math.hypot(rx,rz)||1;rx/=rl;rz/=rl;
+      const ring=[];
+      for(let k=0;k<=N;k++){
+        const th=Math.PI*(200+140*k/N)/180,R=0.95;
+        ring.push([p[0]+0.5+rx*Math.cos(th)*R,p[1]+0.62+Math.sin(th)*R*0.8,p[2]+0.5+rz*Math.cos(th)*R]);
+      }
+      if(prev)for(let k=0;k<N;k++){
+        const t=(k===0||k===N-1)?T.cWhite:T.padB;
+        eTri(arr,prev[k],ring[k],ring[k+1],t,0.02);
+        eTri(arr,prev[k],ring[k+1],prev[k+1],t,0.02);
+      }
+      prev=ring;
+    }
+  }
+  SLIDEM.vb=gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER,SLIDEM.vb);
+  gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(arr),gl.STATIC_DRAW);
+  SLIDEM.n=arr.length/7;
 }
 function buildWaterPark(){
   const cx=SPLASH.x,cz=SPLASH.z,g=SPLASH.h;
@@ -4321,9 +4367,15 @@ function buildWaterPark(){
   fillB(tx-2,g,tz-2,tx+2,g+13,tz+2,B.plank);
   fillB(tx-3,g+14,tz-3,tx+3,g+14,tz+3,B.plank);
   fillB(tx-3,g+15,tz-3,tx+3,g+15,tz+3,B.air);
-  for(let i=0;i<14;i++)fillB(tx+3+Math.floor(i/2),g+13-i,tz-1,tx+4+Math.floor(i/2),g+13-i,tz+1,B.path);
+  for(let i=0;i<17;i++){const sx4=tx+3+i;
+    for(let y=g-4;y<=g+13-i;y++)fillB(sx4,y,tz-1,sx4,y,tz+1,B.path);}
   sb(tx-3,g+15,tz-3,B.lantern);sb(tx+3,g+15,tz+3,B.lantern);
   sb(tx,g+16,tz,B.flag);
+  /* teleporter pair: sandy base pad -> tower top */
+  fillB(tx-1,g+1,tz+4,tx+1,g+1,tz+6,B.path);
+  sb(tx,g+1,tz+5,B.tele);
+  sb(tx,g+14,tz,B.tele);
+  TELE_PAIRS.push({a:[tx,tz+5],b:[tx,tz]});
   /* three slides: Riptide (steep), Zigzag, Lazy Loop */
   slidePath([[tx-3,g+14,tz],[tx-8,g+9,tz+2],[tx-13,g+4,tz+5],[tx-15,g+1,tz+9]]);
   slidePath([[tx,g+14,tz+3],[tx+2,g+11,tz+8],[tx-4,g+8,tz+12],[tx+1,g+5,tz+17],[tx-5,g+1,tz+20],[tx-8,g+1,tz+19]]);
