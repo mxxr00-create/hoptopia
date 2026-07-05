@@ -43,7 +43,7 @@ const CHROME = '/Users/ltc/Library/Caches/ms-playwright/chromium-1223/chrome-mac
     for (let i = 0; i < 20 && !RIDE; i++) await new Promise(r => setTimeout(r, 150)); /* scoop catch */
     started = started || !!RIDE;
     let minY = 99, clipped = false;
-    for (let i = 0; i < 80 && RIDE; i++) {
+    for (let i = 0; i < 140 && RIDE; i++) {
       minY = Math.min(minY, P.y);
       if (P.y < g - 2) clipped = true;
       await new Promise(r => setTimeout(r, 150));
@@ -51,7 +51,8 @@ const CHROME = '/Users/ltc/Library/Caches/ms-playwright/chromium-1223/chrome-mac
     const done = !RIDE;
     await new Promise(r => setTimeout(r, 1500));
     const splashdown = Math.hypot(P.x - (SPLASH.x - 2), P.z - (SPLASH.z + 3)) < 20 && P.y < g + 4;
-    return { reachedPad, atTop, reachedMouth, started, done, clipped, splashdown };
+    const walkedOut = await walkTo(SPLASH.x - 18.5, SPLASH.z + 12.5, 60000) && !P.inWater;
+    return { reachedPad, atTop, reachedMouth, started, done, clipped, splashdown, walkedOut };
   });
 
   /* --- scenario 2: forest walk, no stuck --- */
@@ -80,7 +81,7 @@ const CHROME = '/Users/ltc/Library/Caches/ms-playwright/chromium-1223/chrome-mac
   });
 
   R.errors = errors;
-  const pass = R.park.atTop && R.park.started && R.park.done && !R.park.clipped && R.park.splashdown
+  const pass = R.park.atTop && R.park.started && R.park.done && !R.park.clipped && R.park.splashdown && R.park.walkedOut
     && R.forest.wedged === 0 && R.obby.carried && errors.length === 0;
   console.log(JSON.stringify(R, null, 1));
   console.log(pass ? 'PLAYTEST: PASS' : 'PLAYTEST: FAIL');

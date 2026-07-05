@@ -294,7 +294,7 @@ const clamp=(v,a,b)=>v<a?a:v>b?b:v;
 const lerp=(a,b,t)=>a+(b-a)*t;
 const dist2=(ax,az,bx,bz)=>Math.hypot(ax-bx,az-bz);
 
-const HOP_BUILD='7.12';
+const HOP_BUILD='7.13';
 let GFXPOLY=false; /* 'Smooth' graphics prototype (low-poly terrain + flat colors) */
 const SAVE_KEY='hoptopia1';
 const DEF_SAVE={started:false,critter:'frog',mode:'',coins:0,inv:{},quests:{},best:{},plot:[],pos:null,sound:true,music:true,tut:false,outfit:{hat:'none',neck:'none'},wardrobe:{}};
@@ -1364,7 +1364,7 @@ function calcSun(){
 }
 gl.enable(gl.DEPTH_TEST);
 gl.clearColor(0.62,0.824,0.949,1);
-const FOG=[0.62,0.824,0.949],FOGD=[74,116],VIEW_DIST=122;
+const FOG=[0.62,0.824,0.949],FOGD=[64,102],VIEW_DIST=108;
 let AMB=1,DAYA=1,NIGHTA=0; /* day/night state, updated every frame from the real clock */
 
 /* matrices (column-major) */
@@ -2231,7 +2231,7 @@ function moveEntity(e,dt){
   e.onGround=e.vy<=0&&boxSolid(e,e.x,e.y-0.06,e.z);
   if(GFXPOLY){ /* the low-poly sheet is the real floor on natural ground */
     const sg=smoothGroundY(e.x,e.z);
-    if(sg>0&&!boxSolid(e,e.x,sg,e.z)){ /* never snap up into a solid */
+    if(sg>0&&(!e.inWater||sg>WL+0.72)&&!boxSolid(e,e.x,sg,e.z)){ /* swimmers float free; shores still beach them */
       if(e.y<=sg+0.07&&e.vy<=0){e.y=sg;e.vy=0;e.onGround=true;}
       else if(e.y<sg){e.y=sg;if(e.vy<0)e.vy=0;e.onGround=true;}
     }
@@ -2249,7 +2249,7 @@ function moveEntity(e,dt){
   if(e.y<-6){e.y=groundY(e.x,e.z)+1;e.vy=0;}
 }
 
-let RIDE=null;
+let RIDE=null,FLOATF=0;
 function slideSample(sl,d){
   let acc=0;
   for(let i=0;i<sl.pts.length-1;i++){
@@ -2266,6 +2266,7 @@ function slideSample(sl,d){
   return {p:[e[0]+0.5,e[1],e[2]+0.5],dir:[0,0,1],end:true};
 }
 function rideTick(dt){
+  FLOATF=Math.max(0,FLOATF-dt*2.2);
   if(!RIDE){
     /* water-park lift: stand on the glowing base pad, zip to the tower top */
     if(SLIDES.length){
@@ -2293,7 +2294,7 @@ function rideTick(dt){
     /* falling onto a flume anywhere along it: scoop the rider up, no clipping */
     if(!RIDE&&P.vy<-1.5){
       for(const sl of SLIDES){
-        for(let i=0;i<sl.pts.length;i+=3){
+        for(let i=0;i<sl.pts.length-9;i+=3){ /* never re-catch at the splashdown end */
           const st=sl.pts[i];
           if(Math.hypot(P.x-st[0]-0.5,(P.y-st[1])*0.8,P.z-st[2]-0.5)<1.4){
             RIDE={sl,d:i*0.45+0.2,sp:5};
@@ -2309,12 +2310,12 @@ function rideTick(dt){
   RIDE.sp=clamp(RIDE.sp+(-slideSample(RIDE.sl,RIDE.d).dir[1])*34*dt+4*dt,5,16);
   RIDE.d+=RIDE.sp*dt;
   const s2=slideSample(RIDE.sl,RIDE.d);
-  P.x=s2.p[0];P.y=s2.p[1]+0.35;P.z=s2.p[2];
+  P.x=s2.p[0];P.y=s2.p[1]+0.18;P.z=s2.p[2];
   P.vx=0;P.vy=0;P.vz=0;
   P.yaw=Math.atan2(-s2.dir[0],-s2.dir[2]);
   if(Math.random()<dt*14)burst(P.x,P.y-0.2,P.z,3,'#cfeeff',1.2,1,5,0.06);
   if(s2.end){
-    RIDE=null;
+    RIDE=null;FLOATF=1;
     P.vy=2;P.vx=s2.dir[0]*4;P.vz=s2.dir[2]*4;
     burst(P.x,P.y,P.z,14,'#cfeeff',2.4,2.2,7,0.1);
     sSplash&&sSplash();
@@ -2407,10 +2408,11 @@ function drawCritter(e,t){
   if(sp.teeth)part(mT(0,1.1,0.23),0.12,0.1,0.03,'#ffffff');
   if(sp.shell)part(mT(0,0.76,-0.25),0.5,0.46,0.14,'#8a6a3a');
   if(sp.tail)part(mMul(mT(0,0.5,-0.3),mRX(0.6)),0.18,0.1,0.42,sp.dark);
-  if(e===P&&RIDE){
-    for(let k=0;k<8;k++){
-      const a=k/8*6.2832;
-      part(mT(Math.cos(a)*0.55,0.12,Math.sin(a)*0.55),0.3,0.18,0.3,k%2?'#e04848':'#f2efe4');
+  if(e===P&&(RIDE||FLOATF>0)){
+    const fs=RIDE?1:FLOATF;
+    for(let k=0;k<12;k++){
+      const a=k/12*6.2832;
+      part(mMul(mRY(-a),mT(0.52*fs,0.16,0)),0.24*fs,0.24*fs,0.42*fs,k%3?'#e04848':'#f2efe4');
     }
   }
   if(e===P&&anyDeliveryActive()){
@@ -3603,6 +3605,14 @@ function frame(now){
       const p=moverPos(m,t);
       drawBox(mMul(mT(p[0],p[1],p[2]),mS(m.sx,0.5,m.sz)),m.col);
     }
+    if(NIGHTA>0.15&&PARKLIGHTS.length){
+      gl.uniform1f(PE.uEmis,1);
+      for(const L of PARKLIGHTS){
+        drawBoxA(mMul(mT(L[0],L[1],L[2]),mS(0.55,0.55,0.55)),'#ffd9a0',0.95*NIGHTA);
+        drawBoxA(mMul(mT(L[0],L[1],L[2]),mS(1.6,1.6,1.6)),'#ffbf5e',0.2*NIGHTA);
+      }
+      gl.uniform1f(PE.uEmis,0);
+    }
     drawPet(t);
     if(EGG){
       const bob=Math.sin(t*3)*0.05;
@@ -4324,7 +4334,7 @@ const OBBY_PLATS=[
  [7,3,26,1],[4,6,28,1,'cp'],[0,8,30,1],[-4,6,32,1],
  [-7,3,34,1],[-7,-1,36,1,'cp'],[-4,-4,38,1],[0,-6,40,1],
  [4,-4,42,1],[7,0,44,2]];
-const SLIDES=[];
+const SLIDES=[],PARKLIGHTS=[];
 function slidePath(pts){
   /* Catmull-Rom smoothed path — the flume mesh and the ride both follow it */
   const P2=[];
@@ -4344,8 +4354,10 @@ function slidePath(pts){
 let SLIDEM={vb:null,n:0};
 function buildSlideMesh(){
   if(SLIDEM.vb||!SLIDES.length)return;
-  const arr=[],N=8;
+  const arr=[],N=10,COLS=[T.padB,T.padR,T.padY];
+  let si=0;
   for(const sl of SLIDES){
+    const tile=COLS[si++%3];
     const pts=sl.pts;
     let prev=null;
     for(let i=0;i<pts.length;i++){
@@ -4355,11 +4367,11 @@ function buildSlideMesh(){
       let rx=tz2,rz=-tx2;const rl=Math.hypot(rx,rz)||1;rx/=rl;rz/=rl;
       const ring=[];
       for(let k=0;k<=N;k++){
-        const th=Math.PI*(200+140*k/N)/180,R=0.95;
-        ring.push([p[0]+0.5+rx*Math.cos(th)*R,p[1]+0.62+Math.sin(th)*R*0.8,p[2]+0.5+rz*Math.cos(th)*R]);
+        const th=Math.PI*(172+196*k/N)/180,R=0.92;
+        ring.push([p[0]+0.5+rx*Math.cos(th)*R,p[1]+0.7+Math.sin(th)*R*0.82,p[2]+0.5+rz*Math.cos(th)*R]);
       }
       if(prev)for(let k=0;k<N;k++){
-        const t=(k===0||k===N-1)?T.cWhite:T.padB;
+        const t=(k===0||k===N-1)?T.cWhite:tile;
         eTri(arr,prev[k],ring[k],ring[k+1],t,0.02);
         eTri(arr,prev[k],ring[k+1],prev[k+1],t,0.02);
       }
@@ -4377,8 +4389,10 @@ function buildWaterPark(){
   floorPad(cx-22,cz-22,cx+22,cz+22,g,B.sand);
   /* splash pool */
   for(let z=cz-9;z<=cz+15;z++)for(let x=cx-16;x<=cx+12;x++){
-    if(Math.hypot(x-(cx-2),z-(cz+3))>14)continue;
-    sb(x,g,z,B.water);sb(x,g-1,z,B.water);sb(x,g-2,z,B.sand);
+    const d=Math.hypot(x-(cx-2),z-(cz+3));
+    if(d>14)continue;
+    if(d<=9.5){sb(x,g-1,z,B.sand);sb(x,g,z,B.water);} /* splash-deep everywhere */
+    else sb(x,g,z,B.sand); /* wide flush beach: stand up and walk out */
   }
   /* tower + stairs */
   const tx=cx+14,tz=cz-14;
@@ -4400,8 +4414,11 @@ function buildWaterPark(){
   slidePath([[tx-3,g+14,tz],[tx-8,g+9,tz+2],[tx-13,g+4,tz+5],[tx-15,g+1,tz+9]]);
   slidePath([[tx,g+14,tz+3],[tx+2,g+11,tz+8],[tx-4,g+8,tz+12],[tx+1,g+5,tz+17],[tx-5,g+1,tz+20],[tx-8,g+1,tz+19]]);
   slidePath([[tx-3,g+14,tz-2],[tx-10,g+11,tz-6],[tx-18,g+8,tz-2],[tx-20,g+5,tz+6],[tx-16,g+2,tz+12],[tx-12,g+1,tz+13]]);
-  /* deck lanterns + benches */
-  for(const o of [[-20,-20],[12,-20],[-20,18],[12,18]])sb(cx+o[0],g,cz+o[1],B.lantern);
+  /* lamp posts ringing the park (glow at night) */
+  for(const o of [[-18,-6],[-10,16],[4,18],[10,-18],[-2,-16],[16,6]]){
+    lamp(cx+o[0],cz+o[1],g+1);
+    PARKLIGHTS.push([cx+o[0]+0.5,g+3.6,cz+o[1]+0.5]);
+  }
 }
 function buildObby(){
   const g=Math.max(walkGroundY(OBBY.x,OBBY.z),WL+2);
