@@ -294,7 +294,7 @@ const clamp=(v,a,b)=>v<a?a:v>b?b:v;
 const lerp=(a,b,t)=>a+(b-a)*t;
 const dist2=(ax,az,bx,bz)=>Math.hypot(ax-bx,az-bz);
 
-const HOP_BUILD='7.11';
+const HOP_BUILD='7.12';
 let GFXPOLY=false; /* 'Smooth' graphics prototype (low-poly terrain + flat colors) */
 const SAVE_KEY='hoptopia1';
 const DEF_SAVE={started:false,critter:'frog',mode:'',coins:0,inv:{},quests:{},best:{},plot:[],pos:null,sound:true,music:true,tut:false,outfit:{hat:'none',neck:'none'},wardrobe:{}};
@@ -2279,11 +2279,29 @@ function rideTick(dt){
       }
     }
     for(const sl of SLIDES){
-      const st=sl.pts[0];
-      if(!P.inWater&&Math.hypot(P.x-st[0]-0.5,P.y-st[1],P.z-st[2]-0.5)<1.5){
-        RIDE={sl,d:0.2,sp:4};
-        sHop();toast('Wheee!');
-        break;
+      const nHead=Math.min(12,sl.pts.length);
+      for(let i=0;i<nHead;i++){
+        const st=sl.pts[i];
+        if(!P.inWater&&Math.hypot(P.x-st[0]-0.5,(P.y-st[1])*0.7,P.z-st[2]-0.5)<1.8){
+          RIDE={sl,d:i*0.45+0.2,sp:4};
+          sHop();toast('Wheee!');
+          break;
+        }
+      }
+      if(RIDE)break;
+    }
+    /* falling onto a flume anywhere along it: scoop the rider up, no clipping */
+    if(!RIDE&&P.vy<-1.5){
+      for(const sl of SLIDES){
+        for(let i=0;i<sl.pts.length;i+=3){
+          const st=sl.pts[i];
+          if(Math.hypot(P.x-st[0]-0.5,(P.y-st[1])*0.8,P.z-st[2]-0.5)<1.4){
+            RIDE={sl,d:i*0.45+0.2,sp:5};
+            sHop();
+            break;
+          }
+        }
+        if(RIDE)break;
       }
     }
     return;
@@ -3507,7 +3525,7 @@ const abtnsEl=$('#abtns');
 function frame(now){
   const dt=Math.min(0.05,(now-lastT)/1000);lastT=now;
   const t=now/1000;
-  RENDT=t;RENDDT=dt;
+  RENDT_PREV=RENDT||t;RENDT=t;RENDDT=dt;
   pollGamepad(dt);keyCam(dt);
   const wasWater=P.inWater,wasGround=P.onGround,fallVy=P.vy;
   if(SHOP.active){
@@ -4251,16 +4269,16 @@ bindBtn($('#chipMP'),()=>mpPanel());
 
 /* ========== 14. Phase 3: moving platforms, Obby Tower, pet, maker gadgets ========== */
 const MOVERS=[]; /* {x,y,z,ax,ay,az,per,ph,sx,sz,col,plot} */
-let RENDT=0,RENDDT=0.016;
+let RENDT=0,RENDT_PREV=0,RENDDT=0.016;
 function moverPos(m,tN){const w=Math.sin((tN/m.per+m.ph)*6.2832);
   return[m.x+m.ax*w,m.y+m.ay*w,m.z+m.az*w];}
 function moverCarry(e){
   for(const m of MOVERS){
     const p=moverPos(m,RENDT);
-    if(Math.abs(e.x-p[0])<=m.sx/2+e.hw&&Math.abs(e.z-p[2])<=m.sz/2+e.hw){
+    if(Math.abs(e.x-p[0])<=m.sx/2+e.hw+0.3&&Math.abs(e.z-p[2])<=m.sz/2+e.hw+0.3){
       const top=p[1]+0.25;
-      if(e.vy<=0&&e.y>=top-0.6&&e.y<=top+0.4){
-        const q=moverPos(m,RENDT-RENDDT);
+      if(e.vy<=0&&e.y>=top-0.8&&e.y<=top+0.5){
+        const q=moverPos(m,RENDT_PREV);
         e.x+=p[0]-q[0];e.z+=p[2]-q[2];
         e.y=top;e.vy=0;e.onGround=true;
       }
@@ -4372,10 +4390,12 @@ function buildWaterPark(){
   sb(tx-3,g+15,tz-3,B.lantern);sb(tx+3,g+15,tz+3,B.lantern);
   sb(tx,g+16,tz,B.flag);
   /* teleporter pair: sandy base pad -> tower top */
-  fillB(tx-1,g+1,tz+4,tx+1,g+1,tz+6,B.path);
-  sb(tx,g+1,tz+5,B.tele);
+  for(let dz=-1;dz<=1;dz++)for(let dx=-1;dx<=1;dx++)
+    for(let y=H-1;y>0;y--){
+      const b=gb(tx+dx,y,tz+5+dz);
+      if(b&&b!==B.water){sb(tx+dx,y,tz+5+dz,(dx===0&&dz===0)?B.tele:B.path);break;}
+    }
   sb(tx,g+14,tz,B.tele);
-  TELE_PAIRS.push({a:[tx,tz+5],b:[tx,tz]});
   /* three slides: Riptide (steep), Zigzag, Lazy Loop */
   slidePath([[tx-3,g+14,tz],[tx-8,g+9,tz+2],[tx-13,g+4,tz+5],[tx-15,g+1,tz+9]]);
   slidePath([[tx,g+14,tz+3],[tx+2,g+11,tz+8],[tx-4,g+8,tz+12],[tx+1,g+5,tz+17],[tx-5,g+1,tz+20],[tx-8,g+1,tz+19]]);
