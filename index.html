@@ -730,7 +730,12 @@ html,body{margin:0;height:100%;height:100dvh;width:100%;
   <!-- HOPTOPIA — blocky voxel frog tile -->
   <linearGradient id="bg-hoptopia" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#8fe05a"/><stop offset="50%" stop-color="#3fbf6e"/><stop offset="100%" stop-color="#1a9a8a"/></linearGradient>
   <linearGradient id="bg-kersplat" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ffb23f"/><stop offset="55%" stop-color="#e5533d"/><stop offset="100%" stop-color="#7c2d64"/></linearGradient>
-  <symbol id="app-kersplat" viewBox="0 0 180 180">
+  <linearGradient id="bg-puzzle" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#4dc9f0"/><stop offset="55%" stop-color="#2a7db4"/><stop offset="100%" stop-color="#1d4e8a"/></linearGradient>
+  <symbol id="app-puzzle" viewBox="0 0 180 180">
+    <rect width="180" height="180" rx="40" fill="url(#bg-puzzle)"/>
+    <path d="M74 40a12 12 0 0 1 24 0c0 6 4 9 9 9h27v27c0 5 3 9 9 9a12 12 0 0 1 0 24c-6 0-9 4-9 9v27h-27c-5 0-9-3-9-9a12 12 0 0 0-24 0c0 6-4 9-9 9H38v-27c0-5-3-9-9-9a12 12 0 0 1 0-24c6 0 9-4 9-9V49h27c5 0 9-3 9-9z" fill="#fdfcf7" stroke="#16425e" stroke-width="5" stroke-linejoin="round"/>
+    <circle cx="90" cy="96" r="13" fill="#7dd13f" stroke="#16425e" stroke-width="4"/>
+  </symbol>
     <rect width="180" height="180" rx="40" fill="url(#bg-kersplat)"/>
     <path d="M90 34l11 25 27-7-13 24 25 14-27 8 7 27-25-14-11 25-11-25-25 14 7-27-27-8 25-14-13-24 27 7z" fill="#fff6d8" stroke="#c73f2e" stroke-width="5" stroke-linejoin="round"/>
     <circle cx="90" cy="90" r="17" fill="#ffd23e" stroke="#c73f2e" stroke-width="5"/>
@@ -943,6 +948,7 @@ const HOME_APPS=[
   {id:'games',   label:'Games'},
   {id:'hoptopia',label:'HOPTOPIA', href:'hoptopia.html'},
   {id:'kersplat',label:'KERSPLAT', href:'kersplat.html'},
+  {id:'puzzle',label:'POND PUZZLE', href:'puzzle.html'},
   {id:'messages',label:'Messages', badge:()=>1},
   {id:'camera',  label:'Camera'},
   {id:'tunes',   label:'Tunes'},
@@ -1181,7 +1187,7 @@ function renderGames(v){
     {cls:'gc-2',big:'pop-bubble',name:'Bubble Pop',fn:()=>gamePop(v)},
     {cls:'gc-3',big:'app-hoptopia',name:'HOPTOPIA',fn:()=>location.href='hoptopia.html'},
     {cls:'gc-1',big:'app-kersplat',name:'KERSPLAT',fn:()=>location.href='kersplat.html'},
-    {cls:'gc-4',big:'gl-puzzle', name:'Pond Puzzle',fn:()=>toast('Pond Puzzle — coming soon!')},
+    {cls:'gc-4',big:'gl-puzzle', name:'Pond Puzzle',fn:()=>location.href='puzzle.html'},
   ];
   games.forEach(g=>{const c=el('button','game-card '+g.cls);c.innerHTML=`<span class="big">${SVG(g.big,'cardic')}</span><span>${g.name}</span>`;c.onclick=g.fn;grid.appendChild(c);});
   v.appendChild(grid);

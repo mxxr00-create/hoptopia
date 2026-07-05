@@ -2271,7 +2271,7 @@ function rideTick(dt){
     /* water-park lift: stand on the glowing base pad, zip to the tower top */
     if(SLIDES.length){
       const tx=SPLASH.x+14,tz=SPLASH.z-14;
-      if(P.y<SPLASH.h+7&&Math.hypot(P.x-tx-0.5,P.z-tz-5.5)<1.4&&performance.now()>TELE_CD){
+      if(P.y<SPLASH.h+7&&Math.hypot(P.x-tx-0.5,P.z-tz-5.5)<2.0&&performance.now()>TELE_CD){
         TELE_CD=performance.now()+1600;
         burst(P.x,P.y+0.8,P.z,12,'#c9a8ff',2,2,5,0.1);
         teleport([tx+0.5,SPLASH.h+15.2,tz+0.5]);
